@@ -1,0 +1,27 @@
+[package]
+name = "lettermint"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["Lettermint <help@lettermint.co>"]
+license = "MIT"
+description = "Official Rust SDK for the Lettermint email and team APIs."
+homepage = "https://lettermint.co"
+repository = "https://github.com/lettermint/lettermint-rust"
+readme = "README.md"
+keywords = ["lettermint", "email", "sdk", "api"]
+categories = ["api-bindings", "email"]
+
+[dependencies]
+async-trait = "0.1"
+hex = "0.4"
+hmac = "0.12"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+urlencoding = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
