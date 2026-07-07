@@ -1,5 +1,6 @@
 use crate::endpoints;
 use crate::error::{Error, Result};
+use crate::types;
 use async_trait::async_trait;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use serde::Serialize;
@@ -330,6 +331,10 @@ pub struct ApiClient {
 impl ApiClient {
     pub async fn ping(&self) -> Result<String> {
         Ok(self.client.get_raw("/ping", &[]).await?.trim().to_string())
+    }
+
+    pub async fn blocked_file_types(&self) -> Result<types::BlockedFileTypesResponse> {
+        self.client.get("/blocked-file-types", &[]).await
     }
 
     pub fn domains(&self) -> endpoints::Domains<'_> {

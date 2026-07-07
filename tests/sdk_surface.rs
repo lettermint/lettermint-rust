@@ -79,6 +79,29 @@ async fn api_entrypoint_uses_bearer_auth_and_raw_ping() {
 }
 
 #[tokio::test]
+async fn api_blocked_file_types_uses_bearer_auth() {
+    let transport = MockTransport::new(vec![json_response(serde_json::json!({
+        "extensions": ["exe"],
+        "mime_types": ["application/x-msdownload"]
+    }))]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+
+    let response = api.blocked_file_types().await.unwrap();
+
+    assert_eq!(response.extensions, vec!["exe"]);
+    let request = transport.requests().pop().unwrap();
+    assert_eq!(
+        request.url,
+        "https://api.lettermint.co/v1/blocked-file-types"
+    );
+    assert_eq!(
+        request.headers.get("authorization").unwrap(),
+        "Bearer api-token"
+    );
+    assert!(!request.headers.contains_key("x-lettermint-token"));
+}
+
+#[tokio::test]
 async fn fluent_email_builder_sends_and_resets_attachment_payload() {
     let transport = MockTransport::new(vec![
         json_response(serde_json::json!({"message_id": "msg_1", "status": "pending"})),
@@ -209,9 +232,73 @@ async fn message_raw_body_endpoints_return_plain_text() {
 
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 49);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 50);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
+}
+
+#[test]
+fn generated_types_match_current_team_schema() {
+    assert_eq!(
+        serde_json::to_value(types::MessageEventType::AutoReplied).unwrap(),
+        "auto_replied"
+    );
+    assert_eq!(
+        serde_json::to_value(types::WebhookEvent::MessageAutoReplied).unwrap(),
+        "message.auto_replied"
+    );
+
+    let route_update = types::UpdateRouteData {
+        settings: Some(Box::new(types::UpdateRouteSettingsData {
+            redact_email_content: Some(true),
+            disable_plaintext_generation: Some(false),
+            ..Default::default()
+        })),
+        inbound_settings: Some(Box::new(types::UpdateRouteInboundSettingsData {
+            inbound_spam_threshold: Some(3.0),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let project_update = types::UpdateProjectData {
+        redact_email_content: Some(false),
+        ..Default::default()
+    };
+    let project = types::ProjectData {
+        redact_email_content: true,
+        ..Default::default()
+    };
+    let project_create = types::StoreProjectData {
+        name: "Production".into(),
+        short_token: Some(true),
+        ..Default::default()
+    };
+    let suppression = types::StoreSuppressionData {
+        reason: types::SuppressionReason::Manual,
+        scope: types::SuppressionScope::Global,
+        ..Default::default()
+    };
+    let blocked_file_types = types::BlockedFileTypesResponse {
+        extensions: vec!["exe".into()],
+        mime_types: vec!["application/x-msdownload".into()],
+    };
+
+    assert_eq!(
+        route_update
+            .settings
+            .unwrap()
+            .disable_plaintext_generation,
+        Some(false)
+    );
+    assert_eq!(project_update.redact_email_content, Some(false));
+    assert_eq!(project_create.short_token, Some(true));
+    assert!(project.redact_email_content);
+    assert_eq!(suppression.scope, types::SuppressionScope::Global);
+    assert_eq!(
+        blocked_file_types.mime_types,
+        vec!["application/x-msdownload"]
+    );
 }
 
 #[test]

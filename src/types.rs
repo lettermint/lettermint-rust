@@ -229,6 +229,8 @@ pub enum MessageEventType {
     Suppressed,
     #[serde(rename = "delivered")]
     Delivered,
+    #[serde(rename = "auto_replied")]
+    AutoReplied,
     #[serde(rename = "soft_bounced")]
     SoftBounced,
     #[serde(rename = "hard_bounced")]
@@ -329,6 +331,7 @@ pub struct ProjectData {
     pub id: String,
     pub name: String,
     pub smtp_enabled: bool,
+    pub redact_email_content: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -562,6 +565,8 @@ pub struct StoreProjectData {
     pub smtp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_routes: Option<InitialRoutes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_token: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -579,7 +584,7 @@ pub struct StoreSuppressionData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     pub reason: SuppressionReason,
-    pub scope: String,
+    pub scope: SuppressionScope,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -741,6 +746,8 @@ pub struct UpdateProjectData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smtp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_email_content: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_route_id: Option<String>,
 }
 
@@ -756,9 +763,35 @@ pub struct UpdateRouteData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub settings: Option<serde_json::Value>,
+    pub settings: Option<Box<UpdateRouteSettingsData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub inbound_settings: Option<serde_json::Value>,
+    pub inbound_settings: Option<Box<UpdateRouteInboundSettingsData>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateRouteInboundSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_spam_threshold: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_delivery: Option<AttachmentDelivery>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateRouteSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_opens: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_clicks: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_plaintext_generation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_hosted_unsubscribe: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_email_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -880,6 +913,8 @@ pub enum WebhookEvent {
     MessageSent,
     #[serde(rename = "message.delivered")]
     MessageDelivered,
+    #[serde(rename = "message.auto_replied")]
+    MessageAutoReplied,
     #[serde(rename = "message.hard_bounced")]
     MessageHardBounced,
     #[serde(rename = "message.soft_bounced")]
@@ -978,6 +1013,13 @@ pub type DomainUpdateProjectsRequest = UpdateDomainProjectsData;
 pub struct DomainUpdateProjectsResponse {
     pub data: Box<DomainData>,
     pub message: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BlockedFileTypesResponse {
+    pub extensions: Vec<String>,
+    pub mime_types: Vec<String>,
 }
 
 pub type MessageIndexResponse = serde_json::Value;

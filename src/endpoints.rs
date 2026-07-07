@@ -15,6 +15,7 @@ pub const OPERATION_IDS: &[&str] = &[
     "domain.verifySpecificDnsRecord",
     "domain.updateProjects",
     "v1.ping",
+    "v1.blockedFileTypes",
     "message.index",
     "message.show",
     "message.events",
