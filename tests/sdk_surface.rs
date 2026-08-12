@@ -79,6 +79,21 @@ async fn api_entrypoint_uses_bearer_auth_and_raw_ping() {
 }
 
 #[tokio::test]
+async fn api_lists_blocked_file_types() {
+    let transport = MockTransport::new(vec![json_response(
+        serde_json::json!({"extensions": ["exe"], "mime_types": ["application/x-msdownload"]}),
+    )]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+
+    let response = api.blocked_file_types().await.unwrap();
+
+    assert_eq!(response.extensions, vec!["exe"]);
+    let request = transport.requests().pop().unwrap();
+    assert_eq!(request.url, "https://api.lettermint.co/v1/blocked-file-types");
+    assert_eq!(request.method, "GET");
+}
+
+#[tokio::test]
 async fn fluent_email_builder_sends_and_resets_attachment_payload() {
     let transport = MockTransport::new(vec![
         json_response(serde_json::json!({"message_id": "msg_1", "status": "pending"})),
@@ -207,10 +222,88 @@ async fn message_raw_body_endpoints_return_plain_text() {
     );
 }
 
+#[tokio::test]
+async fn team_role_and_member_assignment_endpoints_map_requests() {
+    let transport = MockTransport::new(vec![
+        json_response(serde_json::json!({"data": []})),
+        json_response(serde_json::json!({"id": "user/id"})),
+        json_response(serde_json::json!({"id": "user/id"})),
+    ]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+
+    assert!(api.team().roles().await.unwrap().data.is_empty());
+    assert_eq!(api.team().member("user/id").await.unwrap().id, "user/id");
+    assert_eq!(
+        api.team()
+            .update_member_assignment(
+                "user/id",
+                &types::UpdateTeamMemberAssignmentData {
+                    role_id: "role_123".into(),
+                    project_access: serde_json::json!({"scope": "all"}),
+                },
+            )
+            .await
+            .unwrap()
+            .id,
+        "user/id"
+    );
+
+    let requests = transport.requests();
+    assert_eq!(requests[0].url, "https://api.lettermint.co/v1/team/roles");
+    assert_eq!(requests[1].url, "https://api.lettermint.co/v1/team/members/user%2Fid");
+    assert_eq!(requests[2].method, "PUT");
+    assert_eq!(
+        requests[2].url,
+        "https://api.lettermint.co/v1/team/members/user%2Fid/assignment"
+    );
+    assert!(requests[2]
+        .body
+        .as_deref()
+        .unwrap()
+        .contains("\"role_id\":\"role_123\""));
+}
+
+#[test]
+fn generated_types_match_current_specs() {
+    let settings = types::UpdateRouteSettingsData {
+        tls: Some(types::TlsPolicy::Enforced),
+        generate_plaintext_fallback: Some(true),
+        ..Default::default()
+    };
+    let domain = types::DomainData {
+        dkim_mode: types::DkimMode::ManagedCname,
+        rotation_ready: true,
+        ..Default::default()
+    };
+    let recipient = types::SuppressedRecipientData {
+        source_message: Some(Box::new(types::SuppressionSourceMessageData {
+            id: "msg_123".into(),
+            available: true,
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let message = types::MessageListData {
+        spam_score: Some(2.5),
+        ..Default::default()
+    };
+
+    assert_eq!(settings.tls, Some(types::TlsPolicy::Enforced));
+    assert_eq!(domain.dkim_mode, types::DkimMode::ManagedCname);
+    assert_eq!(recipient.source_message.unwrap().id, "msg_123");
+    assert_eq!(message.spam_score, Some(2.5));
+}
+
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 49);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 50);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.roles"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.show"));
+    assert!(
+        lettermint::endpoints::OPERATION_IDS.contains(&"team.members.assignment.update")
+    );
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
 }
 

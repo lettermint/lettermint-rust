@@ -332,6 +332,10 @@ impl ApiClient {
         Ok(self.client.get_raw("/ping", &[]).await?.trim().to_string())
     }
 
+    pub async fn blocked_file_types(&self) -> Result<crate::types::BlockedFileTypesResponse> {
+        self.client.get("/blocked-file-types", &[]).await
+    }
+
     pub fn domains(&self) -> endpoints::Domains<'_> {
         endpoints::Domains::new(&self.client)
     }
