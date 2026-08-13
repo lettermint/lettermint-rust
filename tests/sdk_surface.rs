@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use lettermint::client::{AuthMode, HttpRequest, HttpResponse, Transport};
-use lettermint::{Lettermint, types};
+use lettermint::{EmailSettings, Lettermint, types};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -89,7 +89,10 @@ async fn api_lists_blocked_file_types() {
 
     assert_eq!(response.extensions, vec!["exe"]);
     let request = transport.requests().pop().unwrap();
-    assert_eq!(request.url, "https://api.lettermint.co/v1/blocked-file-types");
+    assert_eq!(
+        request.url,
+        "https://api.lettermint.co/v1/blocked-file-types"
+    );
     assert_eq!(request.method, "GET");
 }
 
@@ -107,7 +110,19 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .to("first@example.com")
         .subject("First")
         .html("<p>Hello</p>")
-        .attach("invoice.pdf", "base64-pdf")
+        .header("Message-ID", "<ticket-123@example.com>")
+        .header("X-LM-Preserve-Message-ID", "true")
+        .attach_with_options(
+            "invoice.pdf",
+            "base64-pdf",
+            Some("invoice".into()),
+            Some("application/pdf".into()),
+        )
+        .settings(EmailSettings {
+            track_opens: Some(false),
+            track_clicks: Some(true),
+            tls: Some(types::TlsPolicy::Enforced),
+        })
         .idempotency_key("idem-1")
         .send()
         .await
@@ -131,6 +146,13 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         serde_json::from_str(requests[1].body.as_ref().unwrap()).unwrap();
 
     assert_eq!(first_body["attachments"][0]["filename"], "invoice.pdf");
+    assert_eq!(first_body["attachments"][0]["content_id"], "invoice");
+    assert_eq!(
+        first_body["attachments"][0]["content_type"],
+        "application/pdf"
+    );
+    assert_eq!(first_body["settings"]["tls"], "enforced");
+    assert_eq!(first_body["headers"]["X-LM-Preserve-Message-ID"], "true");
     assert!(second_body.get("attachments").is_none());
     assert_eq!(
         requests[0].headers.get("idempotency-key").unwrap(),
@@ -156,12 +178,23 @@ async fn direct_and_batch_send_support_typed_responses() {
 
     assert_eq!(email.send(&payload).await.unwrap().message_id, "msg_1");
     assert_eq!(
-        email.send_batch(&[payload]).await.unwrap()[0].message_id,
+        email
+            .send_batch_with_idempotency_key(&[payload], "batch-key")
+            .await
+            .unwrap()[0]
+            .message_id,
         "msg_2"
     );
     assert_eq!(
         transport.requests()[1].url,
         "https://api.lettermint.co/v1/send/batch"
+    );
+    assert_eq!(
+        transport.requests()[1]
+            .headers
+            .get("idempotency-key")
+            .unwrap(),
+        "batch-key"
     );
 }
 
@@ -250,17 +283,22 @@ async fn team_role_and_member_assignment_endpoints_map_requests() {
 
     let requests = transport.requests();
     assert_eq!(requests[0].url, "https://api.lettermint.co/v1/team/roles");
-    assert_eq!(requests[1].url, "https://api.lettermint.co/v1/team/members/user%2Fid");
+    assert_eq!(
+        requests[1].url,
+        "https://api.lettermint.co/v1/team/members/user%2Fid"
+    );
     assert_eq!(requests[2].method, "PUT");
     assert_eq!(
         requests[2].url,
         "https://api.lettermint.co/v1/team/members/user%2Fid/assignment"
     );
-    assert!(requests[2]
-        .body
-        .as_deref()
-        .unwrap()
-        .contains("\"role_id\":\"role_123\""));
+    assert!(
+        requests[2]
+            .body
+            .as_deref()
+            .unwrap()
+            .contains("\"role_id\":\"role_123\"")
+    );
 }
 
 #[test]
@@ -301,9 +339,7 @@ fn documented_operations_are_exposed() {
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.roles"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.show"));
-    assert!(
-        lettermint::endpoints::OPERATION_IDS.contains(&"team.members.assignment.update")
-    );
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.assignment.update"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
 }
 
