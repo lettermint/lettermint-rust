@@ -131,6 +131,11 @@ impl<'a> EmailBuilder<'a> {
         self
     }
 
+    pub fn tags(mut self, tags: Vec<serde_json::Value>) -> Self {
+        self.payload.tags = Some(tags);
+        self
+    }
+
     pub fn attach(self, filename: impl Into<String>, content: impl Into<String>) -> Self {
         self.attach_with_options(filename, content, None, None)
     }

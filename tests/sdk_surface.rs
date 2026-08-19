@@ -112,6 +112,9 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .html("<p>Hello</p>")
         .header("Message-ID", "<ticket-123@example.com>")
         .header("X-LM-Preserve-Message-ID", "true")
+        .tags(vec![
+            serde_json::json!({"name": "campaign", "value": "welcome-v2"}),
+        ])
         .attach_with_options(
             "invoice.pdf",
             "base64-pdf",
@@ -153,6 +156,7 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
     );
     assert_eq!(first_body["settings"]["tls"], "enforced");
     assert_eq!(first_body["headers"]["X-LM-Preserve-Message-ID"], "true");
+    assert_eq!(first_body["tags"][0]["name"], "campaign");
     assert!(second_body.get("attachments").is_none());
     assert_eq!(
         requests[0].headers.get("idempotency-key").unwrap(),

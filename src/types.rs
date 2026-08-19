@@ -66,6 +66,8 @@ pub struct SendMailRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub html: Option<String>,
@@ -263,6 +265,7 @@ pub struct MessageData {
     pub status_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
     pub from_email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_name: Option<String>,
@@ -293,6 +296,9 @@ pub struct MessageData {
 pub struct MessageEventData {
     pub message_id: String,
     pub event: MessageEventType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     pub timestamp: String,
@@ -365,6 +371,7 @@ pub struct MessageListData {
     pub reply_to: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_changed_at: Option<String>,
     pub created_at: String,
@@ -1025,6 +1032,8 @@ pub struct UpdateRouteSettingsData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suppress_auto_responders: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppress_disposable_recipients: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_hosted_unsubscribe: Option<bool>,
@@ -1274,17 +1283,8 @@ pub type MessageShowResponse = MessageData;
 #[serde(default)]
 pub struct MessageEventsResponse {
     pub data: Vec<Box<MessageEventData>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    pub per_page: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_cursor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_page_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_cursor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_page_url: Option<String>,
+    pub links: Vec<String>,
+    pub meta: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
