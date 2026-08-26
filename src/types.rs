@@ -14,6 +14,8 @@ pub struct EmailAttachment {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MessageStatus {
+    #[serde(rename = "scheduled")]
+    Scheduled,
     #[serde(rename = "pending")]
     #[default]
     Pending,
@@ -43,6 +45,8 @@ pub enum MessageStatus {
     PolicyRejected,
     #[serde(rename = "unsubscribed")]
     Unsubscribed,
+    #[serde(rename = "canceled")]
+    Canceled,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -59,6 +63,8 @@ pub struct SendMailRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<Vec<String>>,
     pub subject: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<std::collections::BTreeMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -264,6 +270,8 @@ pub struct MessageData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     pub tags: Vec<serde_json::Value>,
     pub from_email: String,
@@ -306,6 +314,14 @@ pub struct MessageEventData {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MessageEventType {
+    #[serde(rename = "scheduled")]
+    Scheduled,
+    #[serde(rename = "rescheduled")]
+    Rescheduled,
+    #[serde(rename = "canceled")]
+    Canceled,
+    #[serde(rename = "released")]
+    Released,
     #[serde(rename = "queued")]
     #[default]
     Queued,
@@ -354,6 +370,8 @@ pub struct MessageListData {
     #[serde(rename = "type")]
     pub r#type: MessageType,
     pub status: MessageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spam_score: Option<f64>,
     pub from_email: String,
@@ -1205,6 +1223,24 @@ pub struct WebhookListData {
 pub struct SendMailResponse {
     pub message_id: String,
     pub status: MessageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RescheduleMessageRequest {
+    pub scheduled_at: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RescheduleMessageResponse {
+    pub message_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<MessageStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
 }
 
 pub type SendBatchMailResponse = Vec<SendMailResponse>;

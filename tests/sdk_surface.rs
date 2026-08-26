@@ -260,6 +260,48 @@ async fn message_raw_body_endpoints_return_plain_text() {
 }
 
 #[tokio::test]
+async fn scheduled_message_endpoints_map_requests() {
+    let transport = MockTransport::new(vec![
+        json_response(
+            serde_json::json!({"message_id": "message/id", "status": "scheduled", "scheduled_at": "2026-08-27T09:00:00Z"}),
+        ),
+        json_response(
+            serde_json::json!({"message_id": "message/id", "status": "canceled", "scheduled_at": null}),
+        ),
+    ]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+
+    assert_eq!(
+        api.messages()
+            .reschedule(
+                "message/id",
+                &types::RescheduleMessageRequest {
+                    scheduled_at: "2026-08-27T09:00:00Z".into()
+                }
+            )
+            .await
+            .unwrap()
+            .status,
+        Some(types::MessageStatus::Scheduled)
+    );
+    assert_eq!(
+        api.messages().cancel("message/id").await.unwrap().status,
+        Some(types::MessageStatus::Canceled)
+    );
+    let requests = transport.requests();
+    assert_eq!(requests[0].method, "PATCH");
+    assert_eq!(
+        requests[0].url,
+        "https://api.lettermint.co/v1/messages/message%2Fid"
+    );
+    assert_eq!(requests[1].method, "POST");
+    assert_eq!(
+        requests[1].url,
+        "https://api.lettermint.co/v1/messages/message%2Fid/cancel"
+    );
+}
+
+#[tokio::test]
 async fn team_role_and_member_assignment_endpoints_map_requests() {
     let transport = MockTransport::new(vec![
         json_response(serde_json::json!({"data": []})),
@@ -327,6 +369,7 @@ fn generated_types_match_current_specs() {
     };
     let message = types::MessageListData {
         spam_score: Some(2.5),
+        scheduled_at: Some("2026-08-27T09:00:00Z".into()),
         ..Default::default()
     };
 
@@ -334,16 +377,21 @@ fn generated_types_match_current_specs() {
     assert_eq!(domain.dkim_mode, types::DkimMode::ManagedCname);
     assert_eq!(recipient.source_message.unwrap().id, "msg_123");
     assert_eq!(message.spam_score, Some(2.5));
+    assert_eq!(
+        message.scheduled_at.as_deref(),
+        Some("2026-08-27T09:00:00Z")
+    );
 }
 
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 50);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 52);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.roles"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.show"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.assignment.update"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"rescheduleMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
 }
 

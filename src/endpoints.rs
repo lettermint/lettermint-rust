@@ -18,6 +18,8 @@ pub const OPERATION_IDS: &[&str] = &[
     "v1.blockedFileTypes",
     "message.index",
     "message.show",
+    "rescheduleMessage",
+    "cancelScheduledMessage",
     "message.events",
     "message.source",
     "message.html",
@@ -152,6 +154,25 @@ impl<'a> Messages<'a> {
     pub async fn retrieve(&self, message_id: &str) -> Result<types::MessageShowResponse> {
         self.client
             .get(&format!("/messages/{}", segment(message_id)), &[])
+            .await
+    }
+
+    pub async fn reschedule(
+        &self,
+        message_id: &str,
+        payload: &types::RescheduleMessageRequest,
+    ) -> Result<types::RescheduleMessageResponse> {
+        self.client
+            .patch(&format!("/messages/{}", segment(message_id)), payload)
+            .await
+    }
+
+    pub async fn cancel(&self, message_id: &str) -> Result<types::RescheduleMessageResponse> {
+        self.client
+            .post(
+                &format!("/messages/{}/cancel", segment(message_id)),
+                &serde_json::json!({}),
+            )
             .await
     }
 

@@ -95,6 +95,11 @@ impl<'a> EmailBuilder<'a> {
         self
     }
 
+    pub fn scheduled_at(mut self, scheduled_at: impl Into<String>) -> Self {
+        self.payload.scheduled_at = Some(scheduled_at.into());
+        self
+    }
+
     pub fn html(mut self, html: impl Into<String>) -> Self {
         self.payload.html = Some(html.into());
         self
