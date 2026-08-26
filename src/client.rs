@@ -161,6 +161,14 @@ impl HttpClient {
         self.request("PUT", path, &[], Some(body), None).await
     }
 
+    pub async fn patch<T, B>(&self, path: &str, body: &B) -> Result<T>
+    where
+        T: DeserializeOwned,
+        B: Serialize + Sync + ?Sized,
+    {
+        self.request("PATCH", path, &[], Some(body), None).await
+    }
+
     pub async fn delete<T>(&self, path: &str) -> Result<T>
     where
         T: DeserializeOwned,
@@ -330,6 +338,10 @@ pub struct ApiClient {
 impl ApiClient {
     pub async fn ping(&self) -> Result<String> {
         Ok(self.client.get_raw("/ping", &[]).await?.trim().to_string())
+    }
+
+    pub async fn blocked_file_types(&self) -> Result<crate::types::BlockedFileTypesResponse> {
+        self.client.get("/blocked-file-types", &[]).await
     }
 
     pub fn domains(&self) -> endpoints::Domains<'_> {
