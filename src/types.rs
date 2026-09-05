@@ -19,6 +19,8 @@ pub enum MessageStatus {
     Pending,
     #[serde(rename = "queued")]
     Queued,
+    #[serde(rename = "quarantined")]
+    Quarantined,
     #[serde(rename = "suppressed")]
     Suppressed,
     #[serde(rename = "processed")]
@@ -253,6 +255,8 @@ pub enum MessageEventType {
     InboundQueued,
     #[serde(rename = "inbound_spam_blocked")]
     InboundSpamBlocked,
+    #[serde(rename = "inbound_released")]
+    InboundReleased,
     #[serde(rename = "inbound_processed")]
     InboundProcessed,
     #[serde(rename = "inbound_retry")]
@@ -999,6 +1003,12 @@ pub struct MessageEventsResponse {
     pub prev_cursor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_page_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProcessInboundMessageResponse {
+    pub data: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

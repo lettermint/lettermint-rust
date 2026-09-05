@@ -18,6 +18,7 @@ pub const OPERATION_IDS: &[&str] = &[
     "message.index",
     "message.show",
     "message.events",
+    "processInboundMessage",
     "message.source",
     "message.html",
     "message.text",
@@ -151,6 +152,12 @@ impl<'a> Messages<'a> {
     pub async fn retrieve(&self, message_id: &str) -> Result<types::MessageShowResponse> {
         self.client
             .get(&format!("/messages/{}", segment(message_id)), &[])
+            .await
+    }
+
+    pub async fn process(&self, message_id: &str) -> Result<types::ProcessInboundMessageResponse> {
+        self.client
+            .post(&format!("/messages/{}/process", segment(message_id)), &())
             .await
     }
 

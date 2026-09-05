@@ -207,9 +207,26 @@ async fn message_raw_body_endpoints_return_plain_text() {
     );
 }
 
+#[tokio::test]
+async fn process_quarantined_message_uses_typed_api_endpoint() {
+    let transport = MockTransport::new(vec![json_response(
+        serde_json::json!({"data": {"message_id": "message id", "status": "queued", "webhook_target_count": 1}}),
+    )]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+    assert_eq!(
+        api.messages().process("message id").await.unwrap().data["status"],
+        "queued"
+    );
+    assert_eq!(
+        transport.requests()[0].url,
+        "https://api.lettermint.co/v1/messages/message%20id/process"
+    );
+}
+
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 49);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 50);
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"processInboundMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
 }
