@@ -2,7 +2,7 @@
 name = "lettermint"
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.98"
 authors = ["Lettermint <help@lettermint.co>"]
 license = "MIT"
 description = "Official Rust SDK for the Lettermint email and team APIs."
