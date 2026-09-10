@@ -125,6 +125,33 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
 }
 
 #[tokio::test]
+async fn typed_message_tags_are_validated_and_serialized() {
+    use lettermint::types::MessageTag;
+
+    assert!(MessageTag::new("invalid name", "value").is_err());
+    assert!(MessageTag::new("__LETTERMINT_internal", "value").is_err());
+
+    let transport = MockTransport::new(vec![json_response(
+        serde_json::json!({"message_id": "msg_1", "status": "pending"}),
+    )]);
+    let email = Lettermint::email_with_transport("sending-token", transport.clone()).unwrap();
+    email
+        .email()
+        .from("sender@example.com")
+        .to("recipient@example.com")
+        .subject("Tags")
+        .text("body")
+        .tags([MessageTag::new("campaign", "welcome").unwrap()])
+        .send()
+        .await
+        .unwrap();
+
+    let body: serde_json::Value =
+        serde_json::from_str(transport.requests()[0].body.as_ref().unwrap()).unwrap();
+    assert_eq!(body["tags"][0]["name"], "campaign");
+}
+
+#[tokio::test]
 async fn direct_and_batch_send_support_typed_responses() {
     let transport = MockTransport::new(vec![
         json_response(serde_json::json!({"message_id": "msg_1", "status": "pending"})),

@@ -6,6 +6,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("API token is required")]
     MissingToken,
+    #[error("invalid message tags: {0}")]
+    InvalidMessageTag(String),
     #[error("HTTP error {status}: {message}")]
     Http {
         status: u16,
