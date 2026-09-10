@@ -1,6 +1,9 @@
 use crate::client::EmailClient;
 use crate::error::Result;
-use crate::types::{EmailAttachment, SendBatchMailResponse, SendMailRequest, SendMailResponse};
+use crate::types::{
+    EmailAttachment, MessageTag, SendBatchMailResponse, SendMailRequest, SendMailResponse,
+    validate_message_tags,
+};
 use std::collections::BTreeMap;
 
 impl EmailClient {
@@ -9,10 +12,20 @@ impl EmailClient {
     }
 
     pub async fn send(&self, payload: &SendMailRequest) -> Result<SendMailResponse> {
+        validate_message_tags(
+            payload.tags.as_deref().unwrap_or(&[]),
+            payload.tag.is_some(),
+        )?;
         self.client.post("/send", payload).await
     }
 
     pub async fn send_batch(&self, payload: &[SendMailRequest]) -> Result<SendBatchMailResponse> {
+        for message in payload {
+            validate_message_tags(
+                message.tags.as_deref().unwrap_or(&[]),
+                message.tag.is_some(),
+            )?;
+        }
         self.client.post("/send/batch", payload).await
     }
 }
@@ -104,6 +117,11 @@ impl<'a> EmailBuilder<'a> {
 
     pub fn tag(mut self, tag: impl Into<String>) -> Self {
         self.payload.tag = Some(tag.into());
+        self
+    }
+
+    pub fn tags(mut self, tags: impl IntoIterator<Item = MessageTag>) -> Self {
+        self.payload.tags = Some(tags.into_iter().collect());
         self
     }
 

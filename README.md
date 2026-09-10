@@ -26,7 +26,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ## Send Email
 
 ```rust
-use lettermint::Lettermint;
+use lettermint::{types::MessageTag, Lettermint};
 
 #[tokio::main]
 async fn main() -> lettermint::Result<()> {
@@ -38,6 +38,11 @@ async fn main() -> lettermint::Result<()> {
         .to("recipient@example.com")
         .subject("Hello from Rust")
         .html("<p>Hello from Lettermint.</p>")
+        .tag("legacy-tag")
+        .tags([
+            MessageTag::new("campaign", "welcome")?,
+            MessageTag::new("customer", "new")?,
+        ])
         .idempotency_key("welcome-123")
         .send()
         .await?;
@@ -48,6 +53,9 @@ async fn main() -> lettermint::Result<()> {
 ```
 
 The fluent email builder owns its payload. Each call to `email.email()` starts with a fresh payload, so attachments, headers, metadata, and recipients do not leak between sends.
+
+`tag()` remains available for the legacy single tag. `tags()` accepts up to 20
+typed name/value tags, or 19 when the legacy tag is also set.
 
 ## Direct API Payloads
 

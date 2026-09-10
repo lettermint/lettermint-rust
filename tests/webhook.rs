@@ -1,4 +1,4 @@
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use lettermint::{Error, Webhook};
 use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
