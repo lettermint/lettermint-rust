@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use lettermint::client::{AuthMode, HttpRequest, HttpResponse, Transport};
-use lettermint::{Lettermint, types};
+use lettermint::{EmailSettings, Lettermint, types};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -110,7 +110,20 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .to("first@example.com")
         .subject("First")
         .html("<p>Hello</p>")
-        .attach("invoice.pdf", "base64-pdf")
+        .header("Message-ID", "<ticket-123@example.com>")
+        .header("X-LM-Preserve-Message-ID", "true")
+        .tags([types::MessageTag::new("campaign", "welcome-v2").unwrap()])
+        .attach_with_options(
+            "invoice.pdf",
+            "base64-pdf",
+            Some("invoice".into()),
+            Some("application/pdf".into()),
+        )
+        .settings(EmailSettings {
+            track_opens: Some(false),
+            track_clicks: Some(true),
+            tls: Some(types::TlsPolicy::Enforced),
+        })
         .idempotency_key("idem-1")
         .send()
         .await
@@ -134,6 +147,14 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         serde_json::from_str(requests[1].body.as_ref().unwrap()).unwrap();
 
     assert_eq!(first_body["attachments"][0]["filename"], "invoice.pdf");
+    assert_eq!(first_body["attachments"][0]["content_id"], "invoice");
+    assert_eq!(
+        first_body["attachments"][0]["content_type"],
+        "application/pdf"
+    );
+    assert_eq!(first_body["settings"]["tls"], "enforced");
+    assert_eq!(first_body["headers"]["X-LM-Preserve-Message-ID"], "true");
+    assert_eq!(first_body["tags"][0]["name"], "campaign");
     assert!(second_body.get("attachments").is_none());
     assert_eq!(
         requests[0].headers.get("idempotency-key").unwrap(),
@@ -186,12 +207,23 @@ async fn direct_and_batch_send_support_typed_responses() {
 
     assert_eq!(email.send(&payload).await.unwrap().message_id, "msg_1");
     assert_eq!(
-        email.send_batch(&[payload]).await.unwrap()[0].message_id,
+        email
+            .send_batch_with_idempotency_key(&[payload], "batch-key")
+            .await
+            .unwrap()[0]
+            .message_id,
         "msg_2"
     );
     assert_eq!(
         transport.requests()[1].url,
         "https://api.lettermint.co/v1/send/batch"
+    );
+    assert_eq!(
+        transport.requests()[1]
+            .headers
+            .get("idempotency-key")
+            .unwrap(),
+        "batch-key"
     );
 }
 
@@ -269,6 +301,48 @@ async fn process_quarantined_message_uses_typed_api_endpoint() {
 }
 
 #[tokio::test]
+async fn scheduled_message_endpoints_map_requests() {
+    let transport = MockTransport::new(vec![
+        json_response(
+            serde_json::json!({"message_id": "message/id", "status": "scheduled", "scheduled_at": "2026-08-27T09:00:00Z"}),
+        ),
+        json_response(
+            serde_json::json!({"message_id": "message/id", "status": "canceled", "scheduled_at": null}),
+        ),
+    ]);
+    let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
+
+    assert_eq!(
+        api.messages()
+            .reschedule(
+                "message/id",
+                &types::RescheduleMessageRequest {
+                    scheduled_at: "2026-08-27T09:00:00Z".into()
+                }
+            )
+            .await
+            .unwrap()
+            .status,
+        Some(types::MessageStatus::Scheduled)
+    );
+    assert_eq!(
+        api.messages().cancel("message/id").await.unwrap().status,
+        Some(types::MessageStatus::Canceled)
+    );
+    let requests = transport.requests();
+    assert_eq!(requests[0].method, "PATCH");
+    assert_eq!(
+        requests[0].url,
+        "https://api.lettermint.co/v1/messages/message%2Fid"
+    );
+    assert_eq!(requests[1].method, "POST");
+    assert_eq!(
+        requests[1].url,
+        "https://api.lettermint.co/v1/messages/message%2Fid/cancel"
+    );
+}
+
+#[tokio::test]
 async fn team_role_and_member_assignment_endpoints_map_requests() {
     let transport = MockTransport::new(vec![
         json_response(serde_json::json!({"data": []})),
@@ -315,14 +389,52 @@ async fn team_role_and_member_assignment_endpoints_map_requests() {
 }
 
 #[test]
+fn generated_types_match_current_specs() {
+    let settings = types::UpdateRouteSettingsData {
+        tls: Some(types::TlsPolicy::Enforced),
+        generate_plaintext_fallback: Some(true),
+        ..Default::default()
+    };
+    let domain = types::DomainData {
+        dkim_mode: types::DkimMode::ManagedCname,
+        rotation_ready: true,
+        ..Default::default()
+    };
+    let recipient = types::SuppressedRecipientData {
+        source_message: Some(Box::new(types::SuppressionSourceMessageData {
+            id: "msg_123".into(),
+            available: true,
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let message = types::MessageListData {
+        spam_score: Some(2.5),
+        scheduled_at: Some("2026-08-27T09:00:00Z".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(settings.tls, Some(types::TlsPolicy::Enforced));
+    assert_eq!(domain.dkim_mode, types::DkimMode::ManagedCname);
+    assert_eq!(recipient.source_message.unwrap().id, "msg_123");
+    assert_eq!(message.spam_score, Some(2.5));
+    assert_eq!(
+        message.scheduled_at.as_deref(),
+        Some("2026-08-27T09:00:00Z")
+    );
+}
+
+#[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 51);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 53);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"processInboundMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.roles"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.show"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"team.members.assignment.update"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"rescheduleMessage"));
+    assert!(lettermint::endpoints::OPERATION_IDS.contains(&"cancelScheduledMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"webhook.showDelivery"));
 }
 

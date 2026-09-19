@@ -2,9 +2,20 @@ use crate::client::EmailClient;
 use crate::error::Result;
 use crate::types::{
     EmailAttachment, MessageTag, SendBatchMailResponse, SendMailRequest, SendMailResponse,
-    validate_message_tags,
+    TlsPolicy, validate_message_tags,
 };
+use serde::Serialize;
 use std::collections::BTreeMap;
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct EmailSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_opens: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_clicks: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsPolicy>,
+}
 
 impl EmailClient {
     pub fn email(&self) -> EmailBuilder<'_> {
@@ -27,6 +38,23 @@ impl EmailClient {
             )?;
         }
         self.client.post("/send/batch", payload).await
+    }
+
+    pub async fn send_batch_with_idempotency_key(
+        &self,
+        payload: &[SendMailRequest],
+        key: impl Into<String>,
+    ) -> Result<SendBatchMailResponse> {
+        for message in payload {
+            validate_message_tags(
+                message.tags.as_deref().unwrap_or(&[]),
+                message.tag.is_some(),
+            )?;
+        }
+        let headers = BTreeMap::from([("idempotency-key".into(), key.into())]);
+        self.client
+            .post_with_headers("/send/batch", payload, Some(headers))
+            .await
     }
 }
 
@@ -84,6 +112,11 @@ impl<'a> EmailBuilder<'a> {
         self
     }
 
+    pub fn scheduled_at(mut self, scheduled_at: impl Into<String>) -> Self {
+        self.payload.scheduled_at = Some(scheduled_at.into());
+        self
+    }
+
     pub fn html(mut self, html: impl Into<String>) -> Self {
         self.payload.html = Some(html.into());
         self
@@ -125,17 +158,32 @@ impl<'a> EmailBuilder<'a> {
         self
     }
 
-    pub fn attach(mut self, filename: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn attach(self, filename: impl Into<String>, content: impl Into<String>) -> Self {
+        self.attach_with_options(filename, content, None, None)
+    }
+
+    pub fn attach_with_options(
+        mut self,
+        filename: impl Into<String>,
+        content: impl Into<String>,
+        content_id: Option<String>,
+        content_type: Option<String>,
+    ) -> Self {
         let attachment = EmailAttachment {
             filename: filename.into(),
             content: content.into(),
-            content_type: None,
-            content_id: None,
+            content_type,
+            content_id,
         };
         self.payload
             .attachments
             .get_or_insert_with(Vec::new)
             .push(serde_json::to_value(attachment).expect("attachment serializes"));
+        self
+    }
+
+    pub fn settings(mut self, settings: EmailSettings) -> Self {
+        self.payload.settings = Some(serde_json::to_value(settings).expect("settings serialize"));
         self
     }
 

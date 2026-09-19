@@ -18,6 +18,8 @@ pub const OPERATION_IDS: &[&str] = &[
     "v1.blockedFileTypes",
     "message.index",
     "message.show",
+    "rescheduleMessage",
+    "cancelScheduledMessage",
     "message.events",
     "processInboundMessage",
     "message.source",
@@ -159,6 +161,25 @@ impl<'a> Messages<'a> {
     pub async fn process(&self, message_id: &str) -> Result<types::ProcessInboundMessageResponse> {
         self.client
             .post(&format!("/messages/{}/process", segment(message_id)), &())
+            .await
+    }
+
+    pub async fn reschedule(
+        &self,
+        message_id: &str,
+        payload: &types::RescheduleMessageRequest,
+    ) -> Result<types::RescheduleMessageResponse> {
+        self.client
+            .patch(&format!("/messages/{}", segment(message_id)), payload)
+            .await
+    }
+
+    pub async fn cancel(&self, message_id: &str) -> Result<types::RescheduleMessageResponse> {
+        self.client
+            .post(
+                &format!("/messages/{}/cancel", segment(message_id)),
+                &serde_json::json!({}),
+            )
             .await
     }
 

@@ -91,6 +91,8 @@ pub struct EmailAttachment {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MessageStatus {
+    #[serde(rename = "scheduled")]
+    Scheduled,
     #[serde(rename = "pending")]
     #[default]
     Pending,
@@ -122,6 +124,8 @@ pub enum MessageStatus {
     PolicyRejected,
     #[serde(rename = "unsubscribed")]
     Unsubscribed,
+    #[serde(rename = "canceled")]
+    Canceled,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -138,6 +142,8 @@ pub struct SendMailRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<Vec<String>>,
     pub subject: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<std::collections::BTreeMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,6 +165,15 @@ pub struct SendMailRequest {
 pub type SendBatchMailRequest = Vec<SendMailRequest>;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TlsPolicy {
+    #[serde(rename = "opportunistic")]
+    #[default]
+    Opportunistic,
+    #[serde(rename = "enforced")]
+    Enforced,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum AttachmentDelivery {
     #[serde(rename = "inline")]
     #[default]
@@ -178,6 +193,47 @@ pub enum BuiltInTeamRole {
     Member,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CursorPaginator {
+    pub data: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub per_page: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_page_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_page_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum DkimMode {
+    #[serde(rename = "legacy_txt")]
+    #[default]
+    LegacyTxt,
+    #[serde(rename = "managed_cname")]
+    ManagedCname,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum DnsRecordPurpose {
+    #[serde(rename = "return_path")]
+    #[default]
+    ReturnPath,
+    #[serde(rename = "dmarc")]
+    Dmarc,
+    #[serde(rename = "dkim_legacy")]
+    DkimLegacy,
+    #[serde(rename = "dkim_primary")]
+    DkimPrimary,
+    #[serde(rename = "dkim_secondary")]
+    DkimSecondary,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum DnsRecordStatus {
     #[serde(rename = "active")]
@@ -189,11 +245,26 @@ pub enum DnsRecordStatus {
     Pending,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum DnsVerificationScope {
+    #[serde(rename = "required")]
+    #[default]
+    Required,
+    #[serde(rename = "recommended")]
+    Recommended,
+    #[serde(rename = "migration")]
+    Migration,
+    #[serde(rename = "deprecated")]
+    Deprecated,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DomainData {
     pub id: String,
     pub domain: String,
+    pub dkim_mode: DkimMode,
+    pub rotation_ready: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -213,6 +284,9 @@ pub struct DomainDnsRecordData {
     pub fqdn: String,
     pub content: String,
     pub status: DnsRecordStatus,
+    pub purpose: DnsRecordPurpose,
+    pub verification_scope: DnsVerificationScope,
+    pub required_for_verification: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verified_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -225,6 +299,7 @@ pub struct DomainListData {
     pub id: String,
     pub domain: String,
     pub status: DomainStatus,
+    pub dkim_mode: DkimMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_changed_at: Option<String>,
     pub created_at: String,
@@ -274,7 +349,10 @@ pub struct MessageData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
     pub from_email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_name: Option<String>,
@@ -306,12 +384,23 @@ pub struct MessageEventData {
     pub message_id: String,
     pub event: MessageEventType,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     pub timestamp: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MessageEventType {
+    #[serde(rename = "scheduled")]
+    Scheduled,
+    #[serde(rename = "rescheduled")]
+    Rescheduled,
+    #[serde(rename = "canceled")]
+    Canceled,
+    #[serde(rename = "released")]
+    Released,
     #[serde(rename = "queued")]
     #[default]
     Queued,
@@ -362,6 +451,10 @@ pub struct MessageListData {
     #[serde(rename = "type")]
     pub r#type: MessageType,
     pub status: MessageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spam_score: Option<f64>,
     pub from_email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_name: Option<String>,
@@ -377,6 +470,9 @@ pub struct MessageListData {
     pub reply_to: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    pub tags: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_changed_at: Option<String>,
     pub created_at: String,
 }
 
@@ -560,6 +656,8 @@ pub enum RbacPermission {
     MessagesRead,
     #[serde(rename = "messages:read_content")]
     MessagesReadContent,
+    #[serde(rename = "messages:send")]
+    MessagesSend,
     #[serde(rename = "suppressions:read")]
     SuppressionsRead,
     #[serde(rename = "suppressions:add")]
@@ -607,7 +705,7 @@ pub struct RouteData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suppressed_recipients_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub statistics: Option<serde_json::Value>,
+    pub statistics: Option<Vec<Box<RouteStatisticData>>>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -637,6 +735,12 @@ pub struct RouteStatisticData {
     pub hard_bounce_count: i64,
     pub spam_complaint_count: i64,
     pub inbound_received_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opened_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opened_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opened_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effective_opened_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -683,6 +787,12 @@ pub struct StatsDailyData {
     pub transactional: Option<Box<StatsTypeData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub broadcast: Option<Box<StatsTypeData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opened: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opened: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opened: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effective_opened: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -733,6 +843,12 @@ pub struct StatsTotalsData {
     pub transactional: Option<Box<StatsTypeData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub broadcast: Option<Box<StatsTypeData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opened: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opened: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opened: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effective_opened: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -817,6 +933,8 @@ pub struct SuppressedRecipientData {
     pub project_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_message: Option<Box<SuppressionSourceMessageData>>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -845,6 +963,17 @@ pub enum SuppressionScope {
     Project,
     #[serde(rename = "route")]
     Route,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SuppressionSourceMessageData {
+    pub id: String,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -1002,6 +1131,10 @@ pub struct UpdateRouteSettingsData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suppress_auto_responders: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppress_disposable_recipients: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsPolicy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_hosted_unsubscribe: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redact_email_content: Option<bool>,
@@ -1143,6 +1276,10 @@ pub enum WebhookEvent {
     MessageInbound,
     #[serde(rename = "message.policy_rejected")]
     MessagePolicyRejected,
+    #[serde(rename = "suppression.added")]
+    SuppressionAdded,
+    #[serde(rename = "suppression.removed")]
+    SuppressionRemoved,
     #[serde(rename = "webhook.test")]
     WebhookTest,
 }
@@ -1167,6 +1304,24 @@ pub struct WebhookListData {
 pub struct SendMailResponse {
     pub message_id: String,
     pub status: MessageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RescheduleMessageRequest {
+    pub scheduled_at: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RescheduleMessageResponse {
+    pub message_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<MessageStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
 }
 
 pub type SendBatchMailResponse = Vec<SendMailResponse>;
@@ -1206,6 +1361,7 @@ pub struct DomainDestroyResponse {
 #[serde(default)]
 pub struct DomainVerifyDnsRecordsResponse {
     pub message: String,
+    pub recommended_failed_records: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1230,7 +1386,13 @@ pub struct BlockedFileTypesResponse {
     pub mime_types: Vec<String>,
 }
 
-pub type MessageIndexResponse = serde_json::Value;
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MessageIndexResponse {
+    pub data: Vec<Box<MessageListData>>,
+    pub links: Vec<String>,
+    pub meta: serde_json::Value,
+}
 
 pub type MessageShowResponse = MessageData;
 
@@ -1238,17 +1400,8 @@ pub type MessageShowResponse = MessageData;
 #[serde(default)]
 pub struct MessageEventsResponse {
     pub data: Vec<Box<MessageEventData>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    pub per_page: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_cursor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_page_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_cursor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_page_url: Option<String>,
+    pub links: Vec<String>,
+    pub meta: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
