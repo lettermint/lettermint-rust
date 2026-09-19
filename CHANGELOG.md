@@ -17,6 +17,14 @@
 
 Applications that use `lettermint = "0.3"` continue to resolve to the compatible 0.3 release line.
 
-## Unreleased
+## v0.3.3 - 2026-09-19
 
-- Initial Rust SDK with async sending client, team API client, generated serde DTOs, webhook verification, tests, and release workflows.
+### Changed
+
+- Update repository and documentation links for the Lettermint organization.
+- Add the shared SDK CI and release workflows.
+- Update locked transitive dependencies to fixed versions.
+
+This maintenance release does not change the public 0.3 API or Cargo features.
+
+## Unreleased
