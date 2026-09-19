@@ -53,8 +53,9 @@ jobs:
           package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
           test "$version" = "$package_version"
           test -f "artifacts/lettermint-${version}.crate"
-          tar -tzf "artifacts/lettermint-${version}.crate" | grep -q "lettermint-${version}/Cargo.toml.orig"
-          tar -tzf "artifacts/lettermint-${version}.crate" | grep -q "lettermint-${version}/src/lib.rs"
+          tar -tzf "artifacts/lettermint-${version}.crate" > package-contents.txt
+          grep -Fxq "lettermint-${version}/Cargo.toml.orig" package-contents.txt
+          grep -Fxq "lettermint-${version}/src/lib.rs" package-contents.txt
           sha256sum "artifacts/lettermint-${version}.crate"
 
       - name: Authenticate with crates.io
