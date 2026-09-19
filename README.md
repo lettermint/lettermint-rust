@@ -5,7 +5,7 @@
 [![docs.rs](https://img.shields.io/docsrs/lettermint?style=flat-square)](https://docs.rs/lettermint)
 [![GitHub Tests](https://img.shields.io/github/actions/workflow/status/lettermint/lettermint-rust/ci.yml?branch=main&label=tests&style=flat-square)](https://github.com/lettermint/lettermint-rust/actions?query=workflow%3ACI+branch%3Amain)
 [![Dependency Status](https://deps.rs/crate/lettermint/latest/status.svg)](https://deps.rs/crate/lettermint)
-[![License](https://img.shields.io/github/license/lettermint/lettermint-rust?style=flat-square)](https://github.com/lettermint/lettermint-rust/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/lettermint/lettermint-rust?style=flat-square)](https://github.com/lettermint/lettermint-rust/blob/main/LICENSE-MIT)
 [![Join our Discord server](https://img.shields.io/discord/1305510095588819035?logo=discord&logoColor=eee&label=Discord&labelColor=464ce5&color=0D0E28&cacheSeconds=43200)](https://lettermint.co/r/discord)
 
 Official Rust SDK for the Lettermint sending and team APIs.
@@ -19,7 +19,7 @@ Official Rust SDK for the Lettermint sending and team APIs.
 
 ```toml
 [dependencies]
-lettermint = "0.1"
+lettermint = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -120,8 +120,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features --locked
 ```
 
-Generated DTOs live in `src/types.rs`. Regenerate them from the repository root with:
+Generated DTOs live in `src/types.rs`. Lettermint maintains them from the shared SDK generation workspace.
 
-```bash
-python3 sdk-generator/rust/generate-types.py
-```
+## Upgrade from 0.3
+
+Version 1.0 has a new client interface. See [MIGRATING.md](MIGRATING.md) before you update an existing application.

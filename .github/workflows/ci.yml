@@ -2,23 +2,34 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -26,23 +37,32 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Ensure rust-version tracks current stable
+      - name: Check release version
+        if: runner.os == 'Linux' && github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          STABLE_MINOR="$(rustc --version | awk '{ print $2 }' | cut -d. -f1,2)"
-          MSRV_MINOR="$(sed -n 's/^rust-version = "\([0-9.]*\)"/\1/p' Cargo.toml | cut -d. -f1,2)"
-          test "$MSRV_MINOR" = "$STABLE_MINOR"
+          version="${RELEASE_TAG#v}"
+          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          test "$version" = "$package_version"
 
       - name: Check formatting
+        if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run Clippy
+        if: runner.os == 'Linux'
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
         run: cargo test --all-features --locked
 
-      - name: Verify package
-        run: cargo package --locked --allow-dirty
+      - name: Check documentation
+        if: runner.os == 'Linux'
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --all-features --no-deps --locked
 
   security:
     name: Security
@@ -51,7 +71,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -67,16 +90,20 @@ jobs:
         run: |
           ! grep -REn \
             'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|sk_(live|test)_[A-Za-z0-9]+|ghp_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+|-----BEGIN (RSA|DSA|EC|OPENSSH|PRIVATE) KEY' \
-            src tests README.md CHANGELOG.md Cargo.toml
+            src tests README.md MIGRATING.md CHANGELOG.md Cargo.toml
 
   build:
-    name: Build
-    runs-on: ubuntu-latest
+    name: Build package
     needs: [test, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -84,11 +111,12 @@ jobs:
           toolchain: stable
 
       - name: Build package
-        run: cargo package --locked --allow-dirty
+        run: cargo package --locked
 
-      - name: Upload build artifacts
+      - name: Upload package
         uses: actions/upload-artifact@v7
         with:
-          name: build-artifacts
-          path: target/package/*.crate
-          retention-days: 7
+          name: package
+          path: target/package/lettermint-*.crate
+          if-no-files-found: error
+          retention-days: 30
