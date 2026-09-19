@@ -51,13 +51,6 @@ pub struct SendMailRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route: Option<String>,
     pub from: String,
-    pub subject: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tag: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub html: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
     pub to: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cc: Option<Vec<String>>,
@@ -65,12 +58,19 @@ pub struct SendMailRequest {
     pub bcc: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<Vec<String>>,
+    pub subject: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<std::collections::BTreeMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<std::collections::BTreeMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachments: Option<Vec<serde_json::Value>>,
 }
@@ -84,6 +84,17 @@ pub enum AttachmentDelivery {
     Inline,
     #[serde(rename = "url")]
     URL,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum BuiltInTeamRole {
+    #[serde(rename = "owner")]
+    #[default]
+    Owner,
+    #[serde(rename = "admin")]
+    Admin,
+    #[serde(rename = "member")]
+    Member,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -229,6 +240,8 @@ pub enum MessageEventType {
     Suppressed,
     #[serde(rename = "delivered")]
     Delivered,
+    #[serde(rename = "auto_replied")]
+    AutoReplied,
     #[serde(rename = "soft_bounced")]
     SoftBounced,
     #[serde(rename = "hard_bounced")]
@@ -323,12 +336,22 @@ pub enum Plan {
     Pro,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ProjectAccessScope {
+    #[serde(rename = "all")]
+    #[default]
+    All,
+    #[serde(rename = "selected")]
+    Selected,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectData {
     pub id: String,
     pub name: String,
     pub smtp_enabled: bool,
+    pub redact_email_content: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -346,10 +369,6 @@ pub struct ProjectData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domains_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub team_members: Option<Vec<Box<TeamMemberData>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub team_members_count: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_28_days: Option<Box<MessageStatsData>>,
     pub created_at: String,
     pub updated_at: String,
@@ -363,10 +382,107 @@ pub struct ProjectListData {
     pub smtp_enabled: bool,
     pub routes_count: i64,
     pub domains_count: i64,
-    pub team_members_count: i64,
     pub last_28_days: Box<MessageStatsData>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum RbacConflictCode {
+    #[serde(rename = "stale_resource")]
+    #[default]
+    StaleResource,
+    #[serde(rename = "owner_protected")]
+    OwnerProtected,
+    #[serde(rename = "last_owner")]
+    LastOwner,
+    #[serde(rename = "built_in_role_immutable")]
+    BuiltInRoleImmutable,
+    #[serde(rename = "custom_role_requires_pro")]
+    CustomRoleRequiresPro,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum RbacPermission {
+    #[serde(rename = "team:manage")]
+    #[default]
+    TeamManage,
+    #[serde(rename = "billing:manage")]
+    BillingManage,
+    #[serde(rename = "security:manage")]
+    SecurityManage,
+    #[serde(rename = "audit:read")]
+    AuditRead,
+    #[serde(rename = "support:manage")]
+    SupportManage,
+    #[serde(rename = "members:read")]
+    MembersRead,
+    #[serde(rename = "members:manage")]
+    MembersManage,
+    #[serde(rename = "roles:manage")]
+    RolesManage,
+    #[serde(rename = "team_tokens:read")]
+    TeamTokensRead,
+    #[serde(rename = "team_tokens:manage")]
+    TeamTokensManage,
+    #[serde(rename = "team_tokens:rotate")]
+    TeamTokensRotate,
+    #[serde(rename = "team_tokens:revoke")]
+    TeamTokensRevoke,
+    #[serde(rename = "projects:create")]
+    ProjectsCreate,
+    #[serde(rename = "team_suppressions:read")]
+    TeamSuppressionsRead,
+    #[serde(rename = "team_suppressions:add")]
+    TeamSuppressionsAdd,
+    #[serde(rename = "team_suppressions:remove")]
+    TeamSuppressionsRemove,
+    #[serde(rename = "projects:read")]
+    ProjectsRead,
+    #[serde(rename = "projects:manage")]
+    ProjectsManage,
+    #[serde(rename = "projects:delete")]
+    ProjectsDelete,
+    #[serde(rename = "routes:read")]
+    RoutesRead,
+    #[serde(rename = "routes:manage")]
+    RoutesManage,
+    #[serde(rename = "routes:delete")]
+    RoutesDelete,
+    #[serde(rename = "domains:read")]
+    DomainsRead,
+    #[serde(rename = "domains:manage")]
+    DomainsManage,
+    #[serde(rename = "domains:delete")]
+    DomainsDelete,
+    #[serde(rename = "project_tokens:read")]
+    ProjectTokensRead,
+    #[serde(rename = "project_tokens:manage")]
+    ProjectTokensManage,
+    #[serde(rename = "project_tokens:rotate")]
+    ProjectTokensRotate,
+    #[serde(rename = "project_tokens:revoke")]
+    ProjectTokensRevoke,
+    #[serde(rename = "webhooks:read")]
+    WebhooksRead,
+    #[serde(rename = "webhooks:manage")]
+    WebhooksManage,
+    #[serde(rename = "webhooks:delete")]
+    WebhooksDelete,
+    #[serde(rename = "webhooks:rotate_secret")]
+    WebhooksRotateSecret,
+    #[serde(rename = "stats:read")]
+    StatsRead,
+    #[serde(rename = "messages:read")]
+    MessagesRead,
+    #[serde(rename = "messages:read_content")]
+    MessagesReadContent,
+    #[serde(rename = "suppressions:read")]
+    SuppressionsRead,
+    #[serde(rename = "suppressions:add")]
+    SuppressionsAdd,
+    #[serde(rename = "suppressions:remove")]
+    SuppressionsRemove,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -399,6 +515,8 @@ pub struct RouteData {
     pub inbound_spam_threshold: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachment_delivery: Option<AttachmentDelivery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<Box<ProjectData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -562,6 +680,8 @@ pub struct StoreProjectData {
     pub smtp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_routes: Option<InitialRoutes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_token: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -578,14 +698,14 @@ pub struct StoreRouteData {
 pub struct StoreSuppressionData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emails: Option<Vec<String>>,
     pub reason: SuppressionReason,
-    pub scope: String,
+    pub scope: SuppressionScope,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub emails: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -594,11 +714,11 @@ pub struct StoreWebhookData {
     pub route_id: String,
     pub name: String,
     pub url: String,
+    pub events: Vec<WebhookEvent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_machine_events: Option<bool>,
-    pub events: Vec<WebhookEvent>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -673,6 +793,7 @@ pub struct TeamData {
     #[serde(rename = "type")]
     pub r#type: TeamType,
     pub plan: Plan,
+    pub included_volume: i64,
     pub tier: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verified_at: Option<String>,
@@ -693,12 +814,30 @@ pub struct TeamData {
 #[serde(default)]
 pub struct TeamMemberData {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<Box<UserData>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
+    pub name: String,
+    pub email: String,
+    pub role: serde_json::Value,
+    pub project_access: Box<TeamMemberProjectAccessData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub joined_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TeamMemberProjectAccessData {
+    pub scope: ProjectAccessScope,
+    pub projects: Vec<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TeamRoleData {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_key: Option<BuiltInTeamRole>,
+    pub permissions: Vec<RbacPermission>,
+    pub assignable: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -741,13 +880,9 @@ pub struct UpdateProjectData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smtp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_email_content: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_route_id: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UpdateProjectMembersData {
-    pub team_member_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -756,9 +891,37 @@ pub struct UpdateRouteData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub settings: Option<serde_json::Value>,
+    pub settings: Option<Box<UpdateRouteSettingsData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub inbound_settings: Option<serde_json::Value>,
+    pub inbound_settings: Option<Box<UpdateRouteInboundSettingsData>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateRouteInboundSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_spam_threshold: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_delivery: Option<AttachmentDelivery>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateRouteSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_opens: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_clicks: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generate_plaintext_fallback: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppress_auto_responders: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_hosted_unsubscribe: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redact_email_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -770,30 +933,25 @@ pub struct UpdateTeamData {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct UpdateTeamMemberAssignmentData {
+    pub role_id: String,
+    pub project_access: serde_json::Value,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UpdateWebhookData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<WebhookEvent>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_machine_events: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub events: Option<Vec<WebhookEvent>>,
 }
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UserData {
-    pub id: String,
-    pub name: String,
-    pub email: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avatar: Option<String>,
-}
-
-pub type VolumeTier = i64;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -880,6 +1038,8 @@ pub enum WebhookEvent {
     MessageSent,
     #[serde(rename = "message.delivered")]
     MessageDelivered,
+    #[serde(rename = "message.auto_replied")]
+    MessageAutoReplied,
     #[serde(rename = "message.hard_bounced")]
     MessageHardBounced,
     #[serde(rename = "message.soft_bounced")]
@@ -980,6 +1140,13 @@ pub struct DomainUpdateProjectsResponse {
     pub message: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BlockedFileTypesResponse {
+    pub extensions: Vec<String>,
+    pub mime_types: Vec<String>,
+}
+
 pub type MessageIndexResponse = serde_json::Value;
 
 pub type MessageShowResponse = MessageData;
@@ -1050,27 +1217,6 @@ pub struct ProjectDestroyResponse {
 pub struct ProjectRotateTokenResponse {
     pub data: Box<ProjectData>,
     pub new_token: String,
-    pub message: String,
-}
-
-pub type ProjectUpdateMembersRequest = UpdateProjectMembersData;
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ProjectUpdateMembersResponse {
-    pub data: Box<ProjectData>,
-    pub message: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ProjectAddMemberResponse {
-    pub message: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ProjectRemoveMemberResponse {
     pub message: String,
 }
 
@@ -1154,7 +1300,11 @@ pub struct SuppressionStoreResponse {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SuppressionDestroyResponse {
+    pub success: bool,
+    pub status: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
 }
 
 pub type TeamShowResponse = TeamData;
@@ -1172,6 +1322,12 @@ pub type TeamUsageResponse = TeamUsageDetailData;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct TeamRolesResponse {
+    pub data: Vec<Box<TeamRoleData>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TeamMembersResponse {
     pub data: Vec<Box<TeamMemberData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1186,6 +1342,12 @@ pub struct TeamMembersResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_page_url: Option<String>,
 }
+
+pub type TeamMembersShowResponse = TeamMemberData;
+
+pub type TeamMembersAssignmentUpdateRequest = UpdateTeamMemberAssignmentData;
+
+pub type TeamMembersAssignmentUpdateResponse = TeamMemberData;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

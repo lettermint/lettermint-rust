@@ -15,6 +15,7 @@ pub const OPERATION_IDS: &[&str] = &[
     "domain.verifySpecificDnsRecord",
     "domain.updateProjects",
     "v1.ping",
+    "v1.blockedFileTypes",
     "message.index",
     "message.show",
     "message.events",
@@ -27,9 +28,6 @@ pub const OPERATION_IDS: &[&str] = &[
     "project.update",
     "project.destroy",
     "project.rotateToken",
-    "project.updateMembers",
-    "project.addMember",
-    "project.removeMember",
     "route.index",
     "route.store",
     "route.show",
@@ -43,7 +41,10 @@ pub const OPERATION_IDS: &[&str] = &[
     "team.show",
     "team.update",
     "team.usage",
+    "team.roles",
     "team.members",
+    "team.members.show",
+    "team.members.assignment.update",
     "webhook.index",
     "webhook.store",
     "webhook.show",
@@ -240,53 +241,6 @@ impl<'a> Projects<'a> {
             .await
     }
 
-    pub async fn update_members<B>(
-        &self,
-        project_id: &str,
-        payload: &B,
-    ) -> Result<types::ProjectUpdateMembersResponse>
-    where
-        B: Serialize + Sync,
-    {
-        self.client
-            .put(
-                &format!("/projects/{}/members", segment(project_id)),
-                payload,
-            )
-            .await
-    }
-
-    pub async fn add_member(
-        &self,
-        project_id: &str,
-        team_member_id: &str,
-    ) -> Result<types::ProjectAddMemberResponse> {
-        self.client
-            .post(
-                &format!(
-                    "/projects/{}/members/{}",
-                    segment(project_id),
-                    segment(team_member_id)
-                ),
-                &empty_body(),
-            )
-            .await
-    }
-
-    pub async fn remove_member(
-        &self,
-        project_id: &str,
-        team_member_id: &str,
-    ) -> Result<types::ProjectRemoveMemberResponse> {
-        self.client
-            .delete(&format!(
-                "/projects/{}/members/{}",
-                segment(project_id),
-                segment(team_member_id)
-            ))
-            .await
-    }
-
     pub async fn routes(
         &self,
         project_id: &str,
@@ -422,8 +376,34 @@ impl<'a> Team<'a> {
         self.client.get("/team/usage", &[]).await
     }
 
+    pub async fn roles(&self) -> Result<types::TeamRolesResponse> {
+        self.client.get("/team/roles", &[]).await
+    }
+
     pub async fn members(&self, query: Query<'_>) -> Result<types::TeamMembersResponse> {
         self.client.get("/team/members", query).await
+    }
+
+    pub async fn member(&self, user_id: &str) -> Result<types::TeamMembersShowResponse> {
+        self.client
+            .get(&format!("/team/members/{}", segment(user_id)), &[])
+            .await
+    }
+
+    pub async fn update_member_assignment<B>(
+        &self,
+        user_id: &str,
+        payload: &B,
+    ) -> Result<types::TeamMembersAssignmentUpdateResponse>
+    where
+        B: Serialize + Sync,
+    {
+        self.client
+            .put(
+                &format!("/team/members/{}/assignment", segment(user_id)),
+                payload,
+            )
+            .await
     }
 }
 
