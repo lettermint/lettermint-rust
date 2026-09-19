@@ -3,7 +3,7 @@
 //! Gated behind the `reqwest` feature. Pair it with `reqwest-native-tls` for
 //! the OS-native TLS stack, or `reqwest-rustls` for `rustls`. No TLS backend is
 //! pulled in by default — pick one or supply your own
-//! [`reqwest::Client`] via [`LettermintClient::with_reqwest_client`].
+//! [`backend::Client`] via [`LettermintClient::with_reqwest_client`].
 //!
 //! The default client uses a 30-second timeout and sets the
 //! `User-Agent: Lettermint/<version> (Rust)` header.

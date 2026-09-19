@@ -2,12 +2,12 @@
 name = "lettermint"
 description = "Lettermint email service client"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/franzos/lettermint-rs"
-homepage = "https://github.com/franzos/lettermint-rs"
+repository = "https://github.com/lettermint/lettermint-rust"
+homepage = "https://lettermint.co"
 documentation = "https://docs.rs/lettermint"
 keywords = ["lettermint", "email", "e-mail", "http"]
 categories = ["api-bindings", "email", "web-programming::http-client"]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 exclude = ["manifest.scm"]
 

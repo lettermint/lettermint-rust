@@ -5,48 +5,142 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.features }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        features: ['reqwest-013-rustls,tracing', 'reqwest-012-rustls,tracing']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Check release version
+        if: runner.os == 'Linux' && github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          test "$version" = "$package_version"
+
+      - name: Run tests
+        run: cargo test --locked --no-default-features --features ${{ matrix.features }}
+
+  check:
+    name: Check (${{ matrix.features }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
       matrix:
         features:
           - reqwest-013-rustls,tracing
           - reqwest-013-native-tls,tracing
           - reqwest-012-rustls,tracing
           - reqwest-012-native-tls,tracing
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-        with:
-          components: clippy
-      - run: cargo check --no-default-features --features ${{ matrix.features }}
-      - run: cargo clippy --no-default-features --features ${{ matrix.features }} --all-targets -- -D warnings
 
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        features:
-          - reqwest-013-rustls,tracing
-          - reqwest-012-rustls,tracing
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-      - run: cargo test --no-default-features --features ${{ matrix.features }}
-
-  fmt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - name: Checkout code
+        uses: actions/checkout@v7
         with:
-          components: rustfmt
-      - run: cargo fmt --check
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --no-default-features --features ${{ matrix.features }} --all-targets -- -D warnings -A clippy::result_large_err
+
+      - name: Check documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-default-features --features ${{ matrix.features }} --no-deps
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run dependency audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+      - name: Scan for common secret patterns
+        run: |
+          ! grep -REn \
+            'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|sk_(live|test)_[A-Za-z0-9]+|ghp_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+|-----BEGIN (RSA|DSA|EC|OPENSSH|PRIVATE) KEY' \
+            src tests README.md CHANGELOG.md Cargo.toml
+
+  build:
+    name: Build package
+    needs: [test, check, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build package
+        run: cargo package --locked
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: target/package/lettermint-*.crate
+          if-no-files-found: error
+          retention-days: 30

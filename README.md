@@ -1,6 +1,6 @@
 # Lettermint
 
-[![ci](https://github.com/franzos/lettermint-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/franzos/lettermint-rs/actions/workflows/ci.yml)
+[![ci](https://github.com/lettermint/lettermint-rust/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/lettermint/lettermint-rust/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lettermint.svg)](https://crates.io/crates/lettermint)
 [![Documentation](https://docs.rs/lettermint/badge.svg)](https://docs.rs/lettermint)
 
@@ -10,7 +10,7 @@ Rust client library for the [Lettermint](https://lettermint.co) email service. H
 
 ```toml
 [dependencies]
-lettermint = { version = "0.1", features = ["reqwest-rustls"] }
+lettermint = { version = "0.3", features = ["reqwest-rustls"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 ```
 
