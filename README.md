@@ -47,7 +47,9 @@ async fn main() -> lettermint::Result<()> {
         .send()
         .await?;
 
-    println!("{}", response.message_id);
+    if let Some(message_id) = response.message_id {
+        println!("{message_id}");
+    }
     Ok(())
 }
 ```

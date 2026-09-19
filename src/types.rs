@@ -905,12 +905,13 @@ pub struct StoreSuppressionData {
     pub route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applies_to: Option<SuppressionAppliesTo>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StoreWebhookData {
-    pub route_id: String,
     pub name: String,
     pub url: String,
     pub events: Vec<WebhookEvent>,
@@ -918,6 +919,14 @@ pub struct StoreWebhookData {
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_machine_events: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<WebhookScope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -929,6 +938,7 @@ pub struct SuppressedRecipientData {
     pub value: String,
     pub reason: SuppressionReason,
     pub scope: SuppressionScope,
+    pub applies_to: SuppressionAppliesTo,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -936,7 +946,15 @@ pub struct SuppressedRecipientData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_message: Option<Box<SuppressionSourceMessageData>>,
     pub created_at: String,
-    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum SuppressionAppliesTo {
+    #[serde(rename = "all")]
+    #[default]
+    All,
+    #[serde(rename = "broadcast")]
+    Broadcast,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -954,10 +972,8 @@ pub enum SuppressionReason {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum SuppressionScope {
-    #[serde(rename = "global")]
-    #[default]
-    Global,
     #[serde(rename = "team")]
+    #[default]
     Team,
     #[serde(rename = "project")]
     Project,
@@ -1167,20 +1183,30 @@ pub struct UpdateWebhookData {
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_machine_events: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<WebhookScope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WebhookData {
     pub id: String,
-    pub route_id: String,
+    pub scope: WebhookScope,
+    pub project_ids: Vec<String>,
+    pub route_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
     pub name: String,
     pub url: String,
     pub events: Vec<String>,
     pub enabled: bool,
     pub include_machine_events: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub secret: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_called_at: Option<String>,
     pub created_at: String,
@@ -1193,6 +1219,12 @@ pub struct WebhookDeliveryData {
     pub id: String,
     pub webhook_id: String,
     pub event_type: WebhookEvent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_route_id: Option<String>,
     pub status: WebhookDeliveryStatus,
     pub attempt_number: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1217,6 +1249,12 @@ pub struct WebhookDeliveryListData {
     pub id: String,
     pub webhook_id: String,
     pub event_type: WebhookEvent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_route_id: Option<String>,
     pub status: WebhookDeliveryStatus,
     pub attempt_number: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1276,6 +1314,14 @@ pub enum WebhookEvent {
     MessageInbound,
     #[serde(rename = "message.policy_rejected")]
     MessagePolicyRejected,
+    #[serde(rename = "message.scheduled")]
+    MessageScheduled,
+    #[serde(rename = "message.rescheduled")]
+    MessageRescheduled,
+    #[serde(rename = "message.canceled")]
+    MessageCanceled,
+    #[serde(rename = "message.released")]
+    MessageReleased,
     #[serde(rename = "suppression.added")]
     SuppressionAdded,
     #[serde(rename = "suppression.removed")]
@@ -1288,11 +1334,47 @@ pub enum WebhookEvent {
 #[serde(default)]
 pub struct WebhookListData {
     pub id: String,
-    pub route_id: String,
+    pub scope: WebhookScope,
+    pub project_ids: Vec<String>,
+    pub route_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
     pub name: String,
     pub url: String,
-    pub events: Vec<WebhookEvent>,
+    pub events: Vec<String>,
     pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_called_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum WebhookScope {
+    #[serde(rename = "team")]
+    #[default]
+    Team,
+    #[serde(rename = "project")]
+    Project,
+    #[serde(rename = "route")]
+    Route,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebhookSecretData {
+    pub id: String,
+    pub scope: WebhookScope,
+    pub project_ids: Vec<String>,
+    pub route_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    pub name: String,
+    pub url: String,
+    pub events: Vec<String>,
+    pub enabled: bool,
+    pub include_machine_events: bool,
+    pub secret: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_called_at: Option<String>,
     pub created_at: String,
@@ -1302,6 +1384,16 @@ pub struct WebhookListData {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SendMailResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+    pub status: MessageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SendBatchMailResponseItem {
     pub message_id: String,
     pub status: MessageStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1324,7 +1416,7 @@ pub struct RescheduleMessageResponse {
     pub scheduled_at: Option<String>,
 }
 
-pub type SendBatchMailResponse = Vec<SendMailResponse>;
+pub type SendBatchMailResponse = Vec<SendBatchMailResponseItem>;
 
 pub type PingResponse = i64;
 
@@ -1613,7 +1705,7 @@ pub type WebhookStoreRequest = StoreWebhookData;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WebhookStoreResponse {
-    pub data: Box<WebhookData>,
+    pub data: Box<WebhookSecretData>,
     pub message: String,
 }
 
@@ -1644,7 +1736,7 @@ pub struct WebhookTestResponse {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WebhookRegenerateSecretResponse {
-    pub data: Box<WebhookData>,
+    pub data: Box<WebhookSecretData>,
     pub message: String,
 }
 
