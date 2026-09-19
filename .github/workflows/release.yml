@@ -70,10 +70,9 @@ jobs:
 
   changelog:
     needs: publish
-    permissions:
-      contents: write
-      pull-requests: write
     uses: ./.github/workflows/update-changelog.yml
+    secrets:
+      release_app_private_key: ${{ secrets.LETTERMINT_RELEASE_APP_PRIVATE_KEY }}
 
   discord:
     needs: publish
