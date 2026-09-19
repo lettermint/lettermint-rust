@@ -47,11 +47,11 @@ fn text_response(body: &str) -> HttpResponse {
 }
 
 #[tokio::test]
-async fn email_entrypoint_uses_sending_auth_and_raw_ping() {
-    let transport = MockTransport::new(vec![text_response(" pong\n")]);
+async fn email_entrypoint_uses_sending_auth_and_typed_ping() {
+    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
     let email = Lettermint::email_with_transport("sending-token", transport.clone()).unwrap();
 
-    assert_eq!(email.ping().await.unwrap(), "pong");
+    assert_eq!(email.ping().await.unwrap(), 200);
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(request.method, "GET");
@@ -64,11 +64,11 @@ async fn email_entrypoint_uses_sending_auth_and_raw_ping() {
 }
 
 #[tokio::test]
-async fn api_entrypoint_uses_bearer_auth_and_raw_ping() {
-    let transport = MockTransport::new(vec![text_response(" pong")]);
+async fn api_entrypoint_uses_bearer_auth_and_typed_ping() {
+    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
     let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
 
-    assert_eq!(api.ping().await.unwrap(), "pong");
+    assert_eq!(api.ping().await.unwrap(), 200);
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(
@@ -129,7 +129,7 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .await
         .unwrap();
 
-    assert_eq!(response.message_id, "msg_1");
+    assert_eq!(response.message_id.as_deref(), Some("msg_1"));
 
     email
         .email()
@@ -205,7 +205,10 @@ async fn direct_and_batch_send_support_typed_responses() {
         ..Default::default()
     };
 
-    assert_eq!(email.send(&payload).await.unwrap().message_id, "msg_1");
+    assert_eq!(
+        email.send(&payload).await.unwrap().message_id.as_deref(),
+        Some("msg_1")
+    );
     assert_eq!(
         email
             .send_batch_with_idempotency_key(&[payload], "batch-key")
@@ -401,6 +404,7 @@ fn generated_types_match_current_specs() {
         ..Default::default()
     };
     let recipient = types::SuppressedRecipientData {
+        applies_to: types::SuppressionAppliesTo::Broadcast,
         source_message: Some(Box::new(types::SuppressionSourceMessageData {
             id: "msg_123".into(),
             available: true,
@@ -422,6 +426,172 @@ fn generated_types_match_current_specs() {
         message.scheduled_at.as_deref(),
         Some("2026-08-27T09:00:00Z")
     );
+}
+
+#[test]
+fn suppression_types_match_the_team_spec() {
+    let request = types::StoreSuppressionData {
+        reason: types::SuppressionReason::Manual,
+        scope: types::SuppressionScope::Team,
+        applies_to: Some(types::SuppressionAppliesTo::Broadcast),
+        ..Default::default()
+    };
+    let serialized = serde_json::to_value(request).unwrap();
+
+    assert_eq!(serialized["applies_to"], "broadcast");
+    assert!(serde_json::from_str::<types::SuppressionScope>("\"global\"").is_err());
+
+    let recipient: types::SuppressedRecipientData = serde_json::from_value(serde_json::json!({
+        "id": "suppression_1",
+        "type": "email",
+        "value": "recipient@example.com",
+        "reason": "manual",
+        "scope": "team",
+        "applies_to": "all",
+        "project_id": null,
+        "route_id": null,
+        "source_message": null,
+        "created_at": "2026-09-19T10:00:00Z"
+    }))
+    .unwrap();
+
+    assert_eq!(recipient.applies_to, types::SuppressionAppliesTo::All);
+}
+
+#[test]
+fn webhook_types_match_the_team_spec() {
+    let request = types::StoreWebhookData {
+        name: "Events".into(),
+        url: "https://example.com/webhooks".into(),
+        events: vec![types::WebhookEvent::MessageScheduled],
+        scope: Some(types::WebhookScope::Project),
+        project_ids: Some(vec!["project_1".into()]),
+        route_ids: Some(vec!["route_1".into()]),
+        route_id: Some("route_1".into()),
+        ..Default::default()
+    };
+    let serialized = serde_json::to_value(request).unwrap();
+    assert_eq!(serialized["scope"], "project");
+    assert_eq!(serialized["project_ids"][0], "project_1");
+    assert_eq!(serialized["route_ids"][0], "route_1");
+
+    let webhook: types::WebhookData = serde_json::from_value(serde_json::json!({
+        "id": "webhook_1",
+        "scope": "team",
+        "project_ids": [],
+        "route_ids": [],
+        "route_id": null,
+        "name": "Events",
+        "url": "https://example.com/webhooks",
+        "events": ["message.scheduled"],
+        "enabled": true,
+        "include_machine_events": false,
+        "last_called_at": null,
+        "created_at": "2026-09-19T10:00:00Z",
+        "updated_at": "2026-09-19T10:00:00Z"
+    }))
+    .unwrap();
+    assert_eq!(webhook.scope, types::WebhookScope::Team);
+    assert_eq!(webhook.route_id, None);
+    assert_eq!(webhook.events, vec!["message.scheduled"]);
+
+    let secret: types::WebhookSecretData = serde_json::from_value(serde_json::json!({
+        "id": "webhook_1",
+        "scope": "route",
+        "project_ids": [],
+        "route_ids": ["route_1"],
+        "route_id": "route_1",
+        "name": "Events",
+        "url": "https://example.com/webhooks",
+        "events": ["message.delivered"],
+        "enabled": true,
+        "include_machine_events": false,
+        "secret": "secret_1",
+        "last_called_at": null,
+        "created_at": "2026-09-19T10:00:00Z",
+        "updated_at": "2026-09-19T10:00:00Z"
+    }))
+    .unwrap();
+    assert_eq!(secret.secret, "secret_1");
+    assert_eq!(secret.scope, types::WebhookScope::Route);
+}
+
+#[test]
+fn webhook_delivery_and_event_types_match_the_team_spec() {
+    let delivery: types::WebhookDeliveryData = serde_json::from_value(serde_json::json!({
+        "id": "delivery_1",
+        "webhook_id": "webhook_1",
+        "event_type": "message.released",
+        "source_scope": "project",
+        "source_project_id": "project_1",
+        "source_route_id": null,
+        "status": "success",
+        "attempt_number": 1,
+        "http_status_code": 200,
+        "duration_ms": 25,
+        "payload": ["{}"],
+        "response_body": null,
+        "response_headers": null,
+        "error_message": null,
+        "delivered_at": "2026-09-19T10:00:00Z",
+        "timestamp": "2026-09-19T10:00:00Z"
+    }))
+    .unwrap();
+    assert_eq!(delivery.source_scope.as_deref(), Some("project"));
+    assert_eq!(delivery.source_project_id.as_deref(), Some("project_1"));
+
+    for (value, expected) in [
+        ("message.scheduled", types::WebhookEvent::MessageScheduled),
+        (
+            "message.rescheduled",
+            types::WebhookEvent::MessageRescheduled,
+        ),
+        ("message.canceled", types::WebhookEvent::MessageCanceled),
+        ("message.released", types::WebhookEvent::MessageReleased),
+    ] {
+        let event =
+            serde_json::from_value::<types::WebhookEvent>(serde_json::json!(value)).unwrap();
+        assert_eq!(event, expected);
+    }
+}
+
+#[test]
+fn response_types_match_the_sending_and_team_specs() {
+    let single: types::SendMailResponse = serde_json::from_value(serde_json::json!({
+        "message_id": null,
+        "status": "pending"
+    }))
+    .unwrap();
+    assert_eq!(single.message_id, None);
+
+    let batch: types::SendBatchMailResponse = serde_json::from_value(serde_json::json!([{
+        "message_id": "message_1",
+        "status": "queued"
+    }]))
+    .unwrap();
+    assert_eq!(batch[0].message_id, "message_1");
+
+    let created: types::WebhookStoreResponse = serde_json::from_value(serde_json::json!({
+        "data": {
+            "id": "webhook_1",
+            "scope": "team",
+            "project_ids": [],
+            "route_ids": [],
+            "route_id": null,
+            "name": "Events",
+            "url": "https://example.com/webhooks",
+            "events": ["message.sent"],
+            "enabled": true,
+            "include_machine_events": false,
+            "secret": "secret_1",
+            "last_called_at": null,
+            "created_at": "2026-09-19T10:00:00Z",
+            "updated_at": "2026-09-19T10:00:00Z"
+        },
+        "message": "Webhook created"
+    }))
+    .unwrap();
+    assert_eq!(created.data.secret, "secret_1");
 }
 
 #[test]
