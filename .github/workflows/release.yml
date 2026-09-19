@@ -37,7 +37,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: package
-          path: artifacts
+          path: ${{ runner.temp }}/package
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -47,16 +47,17 @@ jobs:
       - name: Verify release package
         shell: bash
         env:
+          ARTIFACT_DIR: ${{ runner.temp }}/package
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="${RELEASE_TAG#v}"
           package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
           test "$version" = "$package_version"
-          test -f "artifacts/lettermint-${version}.crate"
-          tar -tzf "artifacts/lettermint-${version}.crate" > package-contents.txt
-          grep -Fxq "lettermint-${version}/Cargo.toml.orig" package-contents.txt
-          grep -Fxq "lettermint-${version}/src/lib.rs" package-contents.txt
-          sha256sum "artifacts/lettermint-${version}.crate"
+          test -f "${ARTIFACT_DIR}/lettermint-${version}.crate"
+          tar -tzf "${ARTIFACT_DIR}/lettermint-${version}.crate" > "${RUNNER_TEMP}/package-contents.txt"
+          grep -Fxq "lettermint-${version}/Cargo.toml.orig" "${RUNNER_TEMP}/package-contents.txt"
+          grep -Fxq "lettermint-${version}/src/lib.rs" "${RUNNER_TEMP}/package-contents.txt"
+          sha256sum "${ARTIFACT_DIR}/lettermint-${version}.crate"
 
       - name: Authenticate with crates.io
         id: auth
