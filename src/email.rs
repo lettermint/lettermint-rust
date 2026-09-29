@@ -1,8 +1,8 @@
 use crate::client::EmailClient;
 use crate::error::Result;
 use crate::types::{
-    EmailAttachment, MessageTag, SendBatchMailResponse, SendMailRequest, SendMailResponse,
-    TlsPolicy, validate_message_tags,
+    EmailAttachment, MessageTag, SandboxResult, SendBatchMailResponse, SendMailRequest,
+    SendMailResponse, TlsPolicy, validate_message_tags,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -155,6 +155,11 @@ impl<'a> EmailBuilder<'a> {
 
     pub fn tags(mut self, tags: impl IntoIterator<Item = MessageTag>) -> Self {
         self.payload.tags = Some(tags.into_iter().collect());
+        self
+    }
+
+    pub fn sandbox_result(mut self, result: SandboxResult) -> Self {
+        self.payload.sandbox_result = Some(result);
         self
     }
 

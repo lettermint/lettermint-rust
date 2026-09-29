@@ -99,7 +99,12 @@ async fn api_lists_blocked_file_types() {
 #[tokio::test]
 async fn fluent_email_builder_sends_and_resets_attachment_payload() {
     let transport = MockTransport::new(vec![
-        json_response(serde_json::json!({"message_id": "msg_1", "status": "pending"})),
+        json_response(serde_json::json!({
+            "message_id": "msg_1",
+            "status": "pending",
+            "sandbox": true,
+            "sandbox_result": "clicked"
+        })),
         json_response(serde_json::json!({"message_id": "msg_2", "status": "pending"})),
     ]);
     let email = Lettermint::email_with_transport("sending-token", transport.clone()).unwrap();
@@ -110,6 +115,7 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .to("first@example.com")
         .subject("First")
         .html("<p>Hello</p>")
+        .sandbox_result(types::SandboxResult::Clicked)
         .header("Message-ID", "<ticket-123@example.com>")
         .header("X-LM-Preserve-Message-ID", "true")
         .tags([types::MessageTag::new("campaign", "welcome-v2").unwrap()])
@@ -130,6 +136,8 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
         .unwrap();
 
     assert_eq!(response.message_id.as_deref(), Some("msg_1"));
+    assert_eq!(response.sandbox, Some(true));
+    assert_eq!(response.sandbox_result, Some(types::SandboxResult::Clicked));
 
     email
         .email()
@@ -155,6 +163,7 @@ async fn fluent_email_builder_sends_and_resets_attachment_payload() {
     assert_eq!(first_body["settings"]["tls"], "enforced");
     assert_eq!(first_body["headers"]["X-LM-Preserve-Message-ID"], "true");
     assert_eq!(first_body["tags"][0]["name"], "campaign");
+    assert_eq!(first_body["sandbox_result"], "clicked");
     assert!(second_body.get("attachments").is_none());
     assert_eq!(
         requests[0].headers.get("idempotency-key").unwrap(),
@@ -559,17 +568,39 @@ fn webhook_delivery_and_event_types_match_the_team_spec() {
 fn response_types_match_the_sending_and_team_specs() {
     let single: types::SendMailResponse = serde_json::from_value(serde_json::json!({
         "message_id": null,
-        "status": "pending"
+        "status": "pending",
+        "sandbox": true,
+        "sandbox_result": "clicked"
     }))
     .unwrap();
     assert_eq!(single.message_id, None);
+    assert_eq!(single.sandbox, Some(true));
+    assert_eq!(single.sandbox_result, Some(types::SandboxResult::Clicked));
 
     let batch: types::SendBatchMailResponse = serde_json::from_value(serde_json::json!([{
         "message_id": "message_1",
-        "status": "queued"
+        "status": "queued",
+        "sandbox": true,
+        "sandbox_result": "hard_bounced"
     }]))
     .unwrap();
     assert_eq!(batch[0].message_id, "message_1");
+    assert_eq!(batch[0].sandbox, Some(true));
+    assert_eq!(
+        batch[0].sandbox_result,
+        Some(types::SandboxResult::HardBounced)
+    );
+
+    let recipient: types::MessageRecipientData = serde_json::from_value(serde_json::json!({
+        "email": "recipient@example.com",
+        "name": null,
+        "sandbox_result": "delivered"
+    }))
+    .unwrap();
+    assert_eq!(
+        recipient.sandbox_result,
+        Some(types::SandboxResult::Delivered)
+    );
 
     let created: types::WebhookStoreResponse = serde_json::from_value(serde_json::json!({
         "data": {

@@ -174,7 +174,7 @@ impl<'a> Messages<'a> {
             .await
     }
 
-    pub async fn cancel(&self, message_id: &str) -> Result<types::RescheduleMessageResponse> {
+    pub async fn cancel(&self, message_id: &str) -> Result<types::CancelScheduledMessageResponse> {
         self.client
             .post(
                 &format!("/messages/{}/cancel", segment(message_id)),
