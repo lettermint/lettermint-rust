@@ -668,6 +668,16 @@ fn webhook_delivery_and_event_types_match_the_team_spec() {
 
 #[test]
 fn response_types_match_the_sending_and_team_specs() {
+    let created: types::ProjectStoreResponse =
+        serde_json::from_value(serde_json::json!({"data":{},"message":"Created"})).unwrap();
+    assert_eq!(created.api_token, "");
+    let component: types::ProjectCreatedData =
+        serde_json::from_value(serde_json::json!({"data":{},"message":"Created"})).unwrap();
+    assert_eq!(component.api_token, None);
+    let page: types::SuppressionIndexResponse =
+        serde_json::from_value(serde_json::json!({"data":[],"path":"/suppressions","per_page":1}))
+            .unwrap();
+    assert_eq!(page.path.as_deref(), Some("/suppressions"));
     let single: types::SendMailResponse = serde_json::from_value(serde_json::json!({
         "message_id": null,
         "status": "pending",

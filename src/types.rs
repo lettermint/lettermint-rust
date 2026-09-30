@@ -1705,7 +1705,7 @@ pub type StatsIndexResponse = StatsData;
 #[serde(default)]
 pub struct SuppressionIndexResponse {
     pub data: Vec<Box<SuppressedRecipientData>>,
-    pub path: String,
+    pub path: Option<String>,
     pub per_page: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
