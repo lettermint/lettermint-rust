@@ -4,6 +4,12 @@ use crate::types;
 use serde::Serialize;
 
 pub const OPERATION_IDS: &[&str] = &[
+    "v1.analytics",
+    "getReportForwarding",
+    "updateReportForwarding",
+    "deleteReportForwarding",
+    "verifyReportForwarding",
+    "resendReportForwardingCode",
     "v1.sendMail",
     "v1.sendBatchMail",
     "v1.ping",
@@ -217,6 +223,71 @@ pub struct Projects<'a> {
 }
 
 impl<'a> Projects<'a> {
+    pub async fn retrieve_report_forwarding(
+        &self,
+        project_id: &str,
+    ) -> Result<types::GetReportForwardingResponse> {
+        self.client
+            .get(
+                &format!("/projects/{}/report-forwarding", segment(project_id)),
+                &[],
+            )
+            .await
+    }
+
+    pub async fn update_report_forwarding(
+        &self,
+        project_id: &str,
+        payload: &types::ReportForwardingRequest,
+    ) -> Result<types::UpdateReportForwardingResponse> {
+        self.client
+            .put(
+                &format!("/projects/{}/report-forwarding", segment(project_id)),
+                payload,
+            )
+            .await
+    }
+
+    pub async fn delete_report_forwarding(&self, project_id: &str) -> Result<()> {
+        self.client
+            .send_request(
+                "DELETE",
+                &format!("/projects/{}/report-forwarding", segment(project_id)),
+                &[],
+                Option::<&()>::None,
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn verify_report_forwarding(
+        &self,
+        project_id: &str,
+        payload: &types::VerifyReportForwardingRequest,
+    ) -> Result<types::VerifyReportForwardingResponse> {
+        self.client
+            .post(
+                &format!("/projects/{}/report-forwarding/verify", segment(project_id)),
+                payload,
+            )
+            .await
+    }
+
+    pub async fn resend_report_forwarding_code(
+        &self,
+        project_id: &str,
+    ) -> Result<types::ResendReportForwardingCodeResponse> {
+        self.client
+            .post(
+                &format!(
+                    "/projects/{}/report-forwarding/resend-code",
+                    segment(project_id)
+                ),
+                &empty_body(),
+            )
+            .await
+    }
     pub(crate) fn new(client: &'a HttpClient) -> Self {
         Self { client }
     }

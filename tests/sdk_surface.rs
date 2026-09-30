@@ -47,11 +47,113 @@ fn text_response(body: &str) -> HttpResponse {
 }
 
 #[tokio::test]
-async fn email_entrypoint_uses_sending_auth_and_typed_ping() {
-    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
+async fn analytics_and_forwarding_follow_the_wire_contracts() {
+    let resource =
+        serde_json::json!({"data":{"destination":null,"verified":false,"verified_at":null}});
+    let transport = MockTransport::new(vec![
+        json_response(
+            serde_json::json!({"data":{"summary":{"metrics":{"accepted":12,"delivery_rate":null}}},"meta":{"timezone":"UTC"},"pagination":{"total_groups":0,"returned_groups":0,"next_cursor":null,"truncated":false}}),
+        ),
+        json_response(resource.clone()),
+        json_response(resource.clone()),
+        json_response(resource.clone()),
+        json_response(resource),
+        HttpResponse {
+            status: 204,
+            reason: "No Content".into(),
+            body: String::new(),
+        },
+    ]);
+    let api = Lettermint::api_with_transport("team-token", transport.clone()).unwrap();
+    let payload = types::AnalyticsRequest {
+        metrics: vec!["accepted".into(), "delivered".into()],
+        include: Some(vec!["summary".into()]),
+        ..Default::default()
+    };
+    let response = api.analytics(&payload).await.unwrap();
+    assert_eq!(response.meta.timezone.as_deref(), Some("UTC"));
+    assert!(
+        response
+            .data
+            .summary
+            .as_ref()
+            .unwrap()
+            .metrics
+            .as_ref()
+            .unwrap()
+            .delivery_rate
+            .is_none()
+    );
+    let forwarding = api
+        .projects()
+        .retrieve_report_forwarding("project/id")
+        .await
+        .unwrap();
+    assert_eq!(forwarding.data.destination, None);
+    assert!(!forwarding.data.verified);
+    api.projects()
+        .update_report_forwarding(
+            "project/id",
+            &types::ReportForwardingRequest {
+                destination: "reports@example.com".into(),
+            },
+        )
+        .await
+        .unwrap();
+    api.projects()
+        .verify_report_forwarding(
+            "project/id",
+            &types::VerifyReportForwardingRequest {
+                code: "123456".into(),
+            },
+        )
+        .await
+        .unwrap();
+    api.projects()
+        .resend_report_forwarding_code("project/id")
+        .await
+        .unwrap();
+    api.projects()
+        .delete_report_forwarding("project/id")
+        .await
+        .unwrap();
+    let base = "https://api.lettermint.co/v1/projects/project%2Fid/report-forwarding";
+    let expected = [
+        ("POST", "https://api.lettermint.co/v1/analytics".to_owned()),
+        ("GET", base.to_owned()),
+        ("PUT", base.to_owned()),
+        ("POST", format!("{base}/verify")),
+        ("POST", format!("{base}/resend-code")),
+        ("DELETE", base.to_owned()),
+    ];
+    let requests = transport.requests();
+    assert_eq!(requests.len(), expected.len());
+    for (request, (method, url)) in requests.iter().zip(expected) {
+        assert_eq!(request.method, method);
+        assert_eq!(request.url, url);
+        assert_eq!(
+            request.headers.get("authorization").unwrap(),
+            "Bearer team-token"
+        );
+        assert!(!request.headers.contains_key("x-lettermint-token"));
+    }
+    let body = |index: usize| {
+        serde_json::from_str::<serde_json::Value>(requests[index].body.as_ref().unwrap()).unwrap()
+    };
+    assert_eq!(
+        body(0)["metrics"],
+        serde_json::json!(["accepted", "delivered"])
+    );
+    assert_eq!(body(2)["destination"], "reports@example.com");
+    assert_eq!(body(3)["code"], "123456");
+}
+
+#[tokio::test]
+async fn email_entrypoint_uses_sending_auth_and_raw_ping() {
+    let transport = MockTransport::new(vec![text_response("pong\n")]);
     let email = Lettermint::email_with_transport("sending-token", transport.clone()).unwrap();
 
-    assert_eq!(email.ping().await.unwrap(), 200);
+    assert_eq!(email.ping().await.unwrap(), "pong");
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(request.method, "GET");
@@ -64,11 +166,11 @@ async fn email_entrypoint_uses_sending_auth_and_typed_ping() {
 }
 
 #[tokio::test]
-async fn api_entrypoint_uses_bearer_auth_and_typed_ping() {
-    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
+async fn api_entrypoint_uses_bearer_auth_and_raw_ping() {
+    let transport = MockTransport::new(vec![text_response("pong\n")]);
     let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
 
-    assert_eq!(api.ping().await.unwrap(), 200);
+    assert_eq!(api.ping().await.unwrap(), "pong");
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(
@@ -627,7 +729,7 @@ fn response_types_match_the_sending_and_team_specs() {
 
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 53);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 59);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"processInboundMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));

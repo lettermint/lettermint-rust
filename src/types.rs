@@ -580,6 +580,7 @@ pub struct ProjectData {
 pub struct ProjectListData {
     pub id: String,
     pub name: String,
+    pub delivery_mode: DeliveryMode,
     pub smtp_enabled: bool,
     pub routes_count: i64,
     pub domains_count: i64,
@@ -674,6 +675,8 @@ pub enum RbacPermission {
     WebhooksRotateSecret,
     #[serde(rename = "stats:read")]
     StatsRead,
+    #[serde(rename = "analytics:read")]
+    AnalyticsRead,
     #[serde(rename = "messages:read")]
     MessagesRead,
     #[serde(rename = "messages:read_content")]
@@ -908,11 +911,13 @@ pub struct StoreProjectData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smtp_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_mode: Option<DeliveryMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_routes: Option<InitialRoutes>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_token: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub delivery_mode: Option<DeliveryMode>,
+    pub redact_email_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -922,6 +927,16 @@ pub struct StoreRouteData {
     pub route_type: RouteType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<Box<UpdateRouteSettingsData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_settings: Option<Box<UpdateRouteInboundSettingsData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_spam_threshold: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_delivery: Option<AttachmentDelivery>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1158,6 +1173,12 @@ pub struct UpdateRouteData {
     pub settings: Option<Box<UpdateRouteSettingsData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inbound_settings: Option<Box<UpdateRouteInboundSettingsData>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_spam_threshold: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_delivery: Option<AttachmentDelivery>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1296,6 +1317,7 @@ pub struct WebhookDeliveryListData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_route_id: Option<String>,
     pub status: WebhookDeliveryStatus,
+    pub sandbox: bool,
     pub attempt_number: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub http_status_code: Option<i64>,
@@ -1383,6 +1405,7 @@ pub struct WebhookListData {
     pub url: String,
     pub events: Vec<String>,
     pub enabled: bool,
+    pub delivery_mode_filter: WebhookDeliveryModeFilter,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_called_at: Option<String>,
     pub created_at: String,
@@ -1471,7 +1494,7 @@ pub struct SendBatchMailResponseItem {
 
 pub type SendBatchMailResponse = Vec<SendBatchMailResponseItem>;
 
-pub type PingResponse = i64;
+pub type PingResponse = String;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1682,8 +1705,7 @@ pub type StatsIndexResponse = StatsData;
 #[serde(default)]
 pub struct SuppressionIndexResponse {
     pub data: Vec<Box<SuppressedRecipientData>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
+    pub path: String,
     pub per_page: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
@@ -1712,6 +1734,8 @@ pub struct SuppressionDestroyResponse {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket_identifier: Option<String>,
 }
 
 pub type TeamShowResponse = TeamData;
@@ -1831,3 +1855,2073 @@ pub struct WebhookDeliveriesResponse {
 }
 
 pub type WebhookShowDeliveryResponse = WebhookDeliveryData;
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectCreatedData {
+    pub data: Box<ProjectData>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_token: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReportForwardingRequest {
+    pub destination: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReportForwardingResource {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination: Option<String>,
+    pub verified: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VerifyReportForwardingRequest {
+    pub code: String,
+}
+
+pub type UpdateReportForwardingRequest = ReportForwardingRequest;
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GetReportForwardingResponse {
+    pub data: Box<ReportForwardingResource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateReportForwardingResponse {
+    pub data: Box<ReportForwardingResource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VerifyReportForwardingResponse {
+    pub data: Box<ReportForwardingResource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ResendReportForwardingCodeResponse {
+    pub data: Box<ReportForwardingResource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponseData {
+    pub data: serde_json::Value,
+    pub meta: serde_json::Value,
+    pub pagination: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsRequestFiltersItem {
+    pub dimension: String,
+    pub operator: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsRequestSort {
+    pub metric: String,
+    pub direction: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsRequest {
+    pub metrics: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters: Option<Vec<Box<AnalyticsRequestFiltersItem>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compare: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_trend: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Box<AnalyticsRequestSort>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponseMetaComparison {
+    pub from: String,
+    pub to: String,
+    pub partial: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponseMeta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_basis: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_since: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partial: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ongoing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_completeness: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_ingested_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_definition_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranked_group_limit: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<Box<AnalyticsResponseMetaComparison>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePagination {
+    pub total_groups: i64,
+    pub returned_groups: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub truncated: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponse {
+    pub data: Box<AnalyticsResponsePayload>,
+    pub meta: Box<AnalyticsResponseMeta>,
+    pub pagination: Box<AnalyticsResponsePagination>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadSummaryRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<Box<AnalyticsResponsePayloadSummaryRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPreviousRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadSummaryPreviousRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummaryPrevious {
+    pub metrics: Box<AnalyticsResponsePayloadSummaryPreviousMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadSummaryPreviousRateBases>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadSummary {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<Box<AnalyticsResponsePayloadSummaryMetrics>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_bases: Option<Box<AnalyticsResponsePayloadSummaryRateBases>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<Box<AnalyticsResponsePayloadSummaryPrevious>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPreviousRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItemPrevious {
+    pub metrics: Box<AnalyticsResponsePayloadTimeSeriesItemPreviousMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadTimeSeriesItemPreviousRateBases>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadTimeSeriesItem {
+    pub metrics: Box<AnalyticsResponsePayloadTimeSeriesItemMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadTimeSeriesItemRateBases>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<Box<AnalyticsResponsePayloadTimeSeriesItemPrevious>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    pub from: String,
+    pub to: String,
+    pub available: bool,
+    pub partial: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPreviousRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemPrevious {
+    pub metrics: Box<AnalyticsResponsePayloadBreakdownItemPreviousMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadBreakdownItemPreviousRateBases>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesEffectiveDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppressed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_rejected: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_failed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mta_accepted: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub administratively_bounced: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_attempts: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_outcome_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub click_tracked_delivered: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounced_recipients: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_of_band_bounce_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complained: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsubscribed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_opens_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_clicks_events: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_latency_samples: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p50_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p95_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_p99_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_latency_samples: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesEffectiveDeliveryRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesBounceRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesDeferralRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesComplaintRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesHumanOpenRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesHumanClickRate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numerator: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBases {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesDeliveryRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_delivery_rate: Option<
+        Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesEffectiveDeliveryRate>,
+    >,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounce_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesBounceRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferral_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesDeferralRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesComplaintRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_open_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesHumanOpenRate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub human_click_rate:
+        Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBasesHumanClickRate>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItemPrevious {
+    pub metrics: Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadBreakdownItemTrendItemPreviousRateBases>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItemTrendItem {
+    pub metrics: Box<AnalyticsResponsePayloadBreakdownItemTrendItemMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadBreakdownItemTrendItemRateBases>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<Box<AnalyticsResponsePayloadBreakdownItemTrendItemPrevious>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    pub from: String,
+    pub to: String,
+    pub available: bool,
+    pub partial: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayloadBreakdownItem {
+    pub metrics: Box<AnalyticsResponsePayloadBreakdownItemMetrics>,
+    pub rate_bases: Box<AnalyticsResponsePayloadBreakdownItemRateBases>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<Box<AnalyticsResponsePayloadBreakdownItemPrevious>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    pub dimensions: std::collections::BTreeMap<String, Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trend: Option<Vec<Box<AnalyticsResponsePayloadBreakdownItemTrendItem>>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalyticsResponsePayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<Box<AnalyticsResponsePayloadSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_series: Option<Vec<Box<AnalyticsResponsePayloadTimeSeriesItem>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub breakdown: Option<Vec<Box<AnalyticsResponsePayloadBreakdownItem>>>,
+}

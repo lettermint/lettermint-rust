@@ -195,7 +195,7 @@ impl HttpClient {
         Ok(serde_json::from_str(&response.body)?)
     }
 
-    async fn send_request<B>(
+    pub(crate) async fn send_request<B>(
         &self,
         method: &str,
         path: &str,
@@ -325,8 +325,8 @@ pub struct EmailClient {
 }
 
 impl EmailClient {
-    pub async fn ping(&self) -> Result<crate::types::PingResponse> {
-        self.client.get("/ping", &[]).await
+    pub async fn ping(&self) -> Result<String> {
+        Ok(self.client.get_raw("/ping", &[]).await?.trim().to_owned())
     }
 }
 
@@ -336,8 +336,15 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
-    pub async fn ping(&self) -> Result<crate::types::PingResponse> {
-        self.client.get("/ping", &[]).await
+    pub async fn ping(&self) -> Result<String> {
+        Ok(self.client.get_raw("/ping", &[]).await?.trim().to_owned())
+    }
+
+    pub async fn analytics(
+        &self,
+        payload: &crate::types::AnalyticsRequest,
+    ) -> Result<crate::types::AnalyticsResponse> {
+        self.client.post("/analytics", payload).await
     }
 
     pub async fn blocked_file_types(&self) -> Result<crate::types::BlockedFileTypesResponse> {
