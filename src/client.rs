@@ -32,6 +32,10 @@ pub struct HttpResponse {
 }
 
 #[async_trait]
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds must_use to its generated future"
+)]
 pub trait Transport: Send + Sync {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse>;
 }

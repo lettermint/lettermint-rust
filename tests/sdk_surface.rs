@@ -710,13 +710,13 @@ fn response_types_match_the_sending_and_team_specs() {
             .unwrap();
     assert_eq!(page.path.as_deref(), Some("/suppressions"));
     let single: types::SendMailResponse = serde_json::from_value(serde_json::json!({
-        "message_id": null,
+        "message_id": "message_1",
         "status": "pending",
         "sandbox": true,
         "sandbox_result": "clicked"
     }))
     .unwrap();
-    assert_eq!(single.message_id, None);
+    assert_eq!(single.message_id.as_deref(), Some("message_1"));
     assert_eq!(single.sandbox, Some(true));
     assert_eq!(single.sandbox_result, Some(types::SandboxResult::Clicked));
 
