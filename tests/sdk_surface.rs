@@ -47,11 +47,113 @@ fn text_response(body: &str) -> HttpResponse {
 }
 
 #[tokio::test]
-async fn email_entrypoint_uses_sending_auth_and_typed_ping() {
-    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
+async fn analytics_and_forwarding_follow_the_wire_contracts() {
+    let resource =
+        serde_json::json!({"data":{"destination":null,"verified":false,"verified_at":null}});
+    let transport = MockTransport::new(vec![
+        json_response(
+            serde_json::json!({"data":{"summary":{"metrics":{"accepted":12,"delivery_rate":null}}},"meta":{"timezone":"UTC"},"pagination":{"total_groups":0,"returned_groups":0,"next_cursor":null,"truncated":false}}),
+        ),
+        json_response(resource.clone()),
+        json_response(resource.clone()),
+        json_response(resource.clone()),
+        json_response(resource),
+        HttpResponse {
+            status: 204,
+            reason: "No Content".into(),
+            body: String::new(),
+        },
+    ]);
+    let api = Lettermint::api_with_transport("team-token", transport.clone()).unwrap();
+    let payload = types::AnalyticsRequest {
+        metrics: vec!["accepted".into(), "delivered".into()],
+        include: Some(vec!["summary".into()]),
+        ..Default::default()
+    };
+    let response = api.analytics(&payload).await.unwrap();
+    assert_eq!(response.meta.timezone.as_deref(), Some("UTC"));
+    assert!(
+        response
+            .data
+            .summary
+            .as_ref()
+            .unwrap()
+            .metrics
+            .as_ref()
+            .unwrap()
+            .delivery_rate
+            .is_none()
+    );
+    let forwarding = api
+        .projects()
+        .retrieve_report_forwarding("project/id")
+        .await
+        .unwrap();
+    assert_eq!(forwarding.data.destination, None);
+    assert!(!forwarding.data.verified);
+    api.projects()
+        .update_report_forwarding(
+            "project/id",
+            &types::ReportForwardingRequest {
+                destination: "reports@example.com".into(),
+            },
+        )
+        .await
+        .unwrap();
+    api.projects()
+        .verify_report_forwarding(
+            "project/id",
+            &types::VerifyReportForwardingRequest {
+                code: "123456".into(),
+            },
+        )
+        .await
+        .unwrap();
+    api.projects()
+        .resend_report_forwarding_code("project/id")
+        .await
+        .unwrap();
+    api.projects()
+        .delete_report_forwarding("project/id")
+        .await
+        .unwrap();
+    let base = "https://api.lettermint.co/v1/projects/project%2Fid/report-forwarding";
+    let expected = [
+        ("POST", "https://api.lettermint.co/v1/analytics".to_owned()),
+        ("GET", base.to_owned()),
+        ("PUT", base.to_owned()),
+        ("POST", format!("{base}/verify")),
+        ("POST", format!("{base}/resend-code")),
+        ("DELETE", base.to_owned()),
+    ];
+    let requests = transport.requests();
+    assert_eq!(requests.len(), expected.len());
+    for (request, (method, url)) in requests.iter().zip(expected) {
+        assert_eq!(request.method, method);
+        assert_eq!(request.url, url);
+        assert_eq!(
+            request.headers.get("authorization").unwrap(),
+            "Bearer team-token"
+        );
+        assert!(!request.headers.contains_key("x-lettermint-token"));
+    }
+    let body = |index: usize| {
+        serde_json::from_str::<serde_json::Value>(requests[index].body.as_ref().unwrap()).unwrap()
+    };
+    assert_eq!(
+        body(0)["metrics"],
+        serde_json::json!(["accepted", "delivered"])
+    );
+    assert_eq!(body(2)["destination"], "reports@example.com");
+    assert_eq!(body(3)["code"], "123456");
+}
+
+#[tokio::test]
+async fn email_entrypoint_uses_sending_auth_and_raw_ping() {
+    let transport = MockTransport::new(vec![text_response("pong\n")]);
     let email = Lettermint::email_with_transport("sending-token", transport.clone()).unwrap();
 
-    assert_eq!(email.ping().await.unwrap(), 200);
+    assert_eq!(email.ping().await.unwrap(), "pong");
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(request.method, "GET");
@@ -64,11 +166,11 @@ async fn email_entrypoint_uses_sending_auth_and_typed_ping() {
 }
 
 #[tokio::test]
-async fn api_entrypoint_uses_bearer_auth_and_typed_ping() {
-    let transport = MockTransport::new(vec![json_response(serde_json::json!(200))]);
+async fn api_entrypoint_uses_bearer_auth_and_raw_ping() {
+    let transport = MockTransport::new(vec![text_response("pong\n")]);
     let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
 
-    assert_eq!(api.ping().await.unwrap(), 200);
+    assert_eq!(api.ping().await.unwrap(), "pong");
 
     let request = transport.requests().pop().unwrap();
     assert_eq!(
@@ -298,9 +400,11 @@ async fn message_raw_body_endpoints_return_plain_text() {
 
 #[tokio::test]
 async fn process_quarantined_message_uses_typed_api_endpoint() {
-    let transport = MockTransport::new(vec![json_response(
-        serde_json::json!({"data": {"message_id": "message id", "status": "queued", "webhook_target_count": 1}}),
-    )]);
+    let transport = MockTransport::new(vec![HttpResponse {
+        status: 202,
+        reason: "Accepted".into(),
+        body: serde_json::json!({"data": {"message_id": "message id", "status": "queued", "webhook_target_count": 1}}).to_string(),
+    }]);
     let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
     assert_eq!(
         api.messages().process("message id").await.unwrap().data["status"],
@@ -337,10 +441,12 @@ async fn scheduled_message_endpoints_map_requests() {
             .status,
         Some(types::MessageStatus::Scheduled)
     );
-    assert_eq!(
-        api.messages().cancel("message/id").await.unwrap().status,
-        Some(types::MessageStatus::Canceled)
-    );
+    let canceled: types::RescheduleMessageResponse =
+        api.messages().cancel("message/id").await.unwrap();
+    let canceled: types::CancelScheduledMessageResponse = canceled;
+    assert_eq!(canceled.message_id, "message/id");
+    assert_eq!(canceled.status, Some(types::MessageStatus::Canceled));
+    assert_eq!(canceled.scheduled_at, None);
     let requests = transport.requests();
     assert_eq!(requests[0].method, "PATCH");
     assert_eq!(
@@ -351,6 +457,33 @@ async fn scheduled_message_endpoints_map_requests() {
     assert_eq!(
         requests[1].url,
         "https://api.lettermint.co/v1/messages/message%2Fid/cancel"
+    );
+    assert_eq!(requests[1].headers["authorization"], "Bearer api-token");
+    assert_eq!(requests[1].body.as_deref(), Some("{}"));
+}
+
+#[test]
+fn legacy_cursor_container_keeps_its_public_fields() {
+    let cursor = types::CursorPaginator {
+        data: vec!["message-id".into()],
+        path: Some("/messages".into()),
+        per_page: 25,
+        next_cursor: Some("next".into()),
+        next_page_url: Some("/messages?cursor=next".into()),
+        prev_cursor: None,
+        prev_page_url: None,
+    };
+    let json = serde_json::to_value(&cursor).unwrap();
+    assert_eq!(json["data"], serde_json::json!(["message-id"]));
+    assert_eq!(json["path"], "/messages");
+    assert_eq!(json["per_page"], 25);
+    assert_eq!(json["next_cursor"], "next");
+    assert_eq!(json["next_page_url"], "/messages?cursor=next");
+    assert!(json.get("prev_cursor").is_none());
+    assert!(json.get("prev_page_url").is_none());
+    assert_eq!(
+        serde_json::from_value::<types::CursorPaginator>(json).unwrap(),
+        cursor
     );
 }
 
@@ -566,6 +699,16 @@ fn webhook_delivery_and_event_types_match_the_team_spec() {
 
 #[test]
 fn response_types_match_the_sending_and_team_specs() {
+    let created: types::ProjectStoreResponse =
+        serde_json::from_value(serde_json::json!({"data":{},"message":"Created"})).unwrap();
+    assert_eq!(created.api_token, "");
+    let component: types::ProjectCreatedData =
+        serde_json::from_value(serde_json::json!({"data":{},"message":"Created"})).unwrap();
+    assert_eq!(component.api_token, None);
+    let page: types::SuppressionIndexResponse =
+        serde_json::from_value(serde_json::json!({"data":[],"path":"/suppressions","per_page":1}))
+            .unwrap();
+    assert_eq!(page.path.as_deref(), Some("/suppressions"));
     let single: types::SendMailResponse = serde_json::from_value(serde_json::json!({
         "message_id": null,
         "status": "pending",
@@ -627,7 +770,7 @@ fn response_types_match_the_sending_and_team_specs() {
 
 #[test]
 fn documented_operations_are_exposed() {
-    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 53);
+    assert_eq!(lettermint::endpoints::OPERATION_IDS.len(), 59);
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"processInboundMessage"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.sendMail"));
     assert!(lettermint::endpoints::OPERATION_IDS.contains(&"v1.blockedFileTypes"));
