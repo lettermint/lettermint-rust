@@ -722,6 +722,8 @@ pub struct RouteData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inbound_mx_hostname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_route_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub inbound_domain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inbound_domain_verified_at: Option<String>,
