@@ -400,9 +400,11 @@ async fn message_raw_body_endpoints_return_plain_text() {
 
 #[tokio::test]
 async fn process_quarantined_message_uses_typed_api_endpoint() {
-    let transport = MockTransport::new(vec![json_response(
-        serde_json::json!({"data": {"message_id": "message id", "status": "queued", "webhook_target_count": 1}}),
-    )]);
+    let transport = MockTransport::new(vec![HttpResponse {
+        status: 202,
+        reason: "Accepted".into(),
+        body: serde_json::json!({"data": {"message_id": "message id", "status": "queued", "webhook_target_count": 1}}).to_string(),
+    }]);
     let api = Lettermint::api_with_transport("api-token", transport.clone()).unwrap();
     assert_eq!(
         api.messages().process("message id").await.unwrap().data["status"],
@@ -439,10 +441,12 @@ async fn scheduled_message_endpoints_map_requests() {
             .status,
         Some(types::MessageStatus::Scheduled)
     );
-    assert_eq!(
-        api.messages().cancel("message/id").await.unwrap().status,
-        Some(types::MessageStatus::Canceled)
-    );
+    let canceled: types::RescheduleMessageResponse =
+        api.messages().cancel("message/id").await.unwrap();
+    let canceled: types::CancelScheduledMessageResponse = canceled;
+    assert_eq!(canceled.message_id, "message/id");
+    assert_eq!(canceled.status, Some(types::MessageStatus::Canceled));
+    assert_eq!(canceled.scheduled_at, None);
     let requests = transport.requests();
     assert_eq!(requests[0].method, "PATCH");
     assert_eq!(
@@ -453,6 +457,33 @@ async fn scheduled_message_endpoints_map_requests() {
     assert_eq!(
         requests[1].url,
         "https://api.lettermint.co/v1/messages/message%2Fid/cancel"
+    );
+    assert_eq!(requests[1].headers["authorization"], "Bearer api-token");
+    assert_eq!(requests[1].body.as_deref(), Some("{}"));
+}
+
+#[test]
+fn legacy_cursor_container_keeps_its_public_fields() {
+    let cursor = types::CursorPaginator {
+        data: vec!["message-id".into()],
+        path: Some("/messages".into()),
+        per_page: 25,
+        next_cursor: Some("next".into()),
+        next_page_url: Some("/messages?cursor=next".into()),
+        prev_cursor: None,
+        prev_page_url: None,
+    };
+    let json = serde_json::to_value(&cursor).unwrap();
+    assert_eq!(json["data"], serde_json::json!(["message-id"]));
+    assert_eq!(json["path"], "/messages");
+    assert_eq!(json["per_page"], 25);
+    assert_eq!(json["next_cursor"], "next");
+    assert_eq!(json["next_page_url"], "/messages?cursor=next");
+    assert!(json.get("prev_cursor").is_none());
+    assert!(json.get("prev_page_url").is_none());
+    assert_eq!(
+        serde_json::from_value::<types::CursorPaginator>(json).unwrap(),
+        cursor
     );
 }
 

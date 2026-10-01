@@ -1566,14 +1566,24 @@ pub struct RescheduleMessageResponse {
 
 pub type MessageShowResponse = MessageData;
 
+pub type CancelScheduledMessageResponse = RescheduleMessageResponse;
+
+/// A legacy cursor container. Message endpoints use their own response types.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct CancelScheduledMessageResponse {
-    pub message_id: String,
+pub struct CursorPaginator {
+    pub data: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<MessageStatus>,
+    pub path: Option<String>,
+    pub per_page: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduled_at: Option<String>,
+    pub next_cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_page_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_page_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
