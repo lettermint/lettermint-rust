@@ -47,6 +47,56 @@ fn text_response(body: &str) -> HttpResponse {
 }
 
 #[tokio::test]
+async fn webhook_credential_states_keep_bearer_auth() {
+    for auth in [
+        None,
+        Some(None),
+        Some(Some(types::WebhookBasicAuthData {
+            username: " fixture user ".into(),
+            password: "".into(),
+        })),
+    ] {
+        let transport = MockTransport::new(vec![
+            json_response(serde_json::json!({"data":{"has_basic_auth":true}})),
+            json_response(serde_json::json!({"data":{"has_basic_auth":true}})),
+        ]);
+        let api = Lettermint::api_with_transport("fixture-token", transport.clone()).unwrap();
+        let created = api
+            .webhooks()
+            .create(&types::StoreWebhookData {
+                basic_auth: auth.clone(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(created.data.has_basic_auth);
+        let updated = api
+            .webhooks()
+            .update(
+                "webhook-id",
+                &types::UpdateWebhookData {
+                    basic_auth: auth.clone(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(updated.data.has_basic_auth);
+        for (index, request) in transport.requests().iter().enumerate() {
+            assert_eq!(request.method, if index == 0 { "POST" } else { "PUT" });
+            assert_eq!(request.headers["authorization"], "Bearer fixture-token");
+            assert!(!request.headers.contains_key("x-lettermint-token"));
+            let body: serde_json::Value =
+                serde_json::from_str(request.body.as_ref().unwrap()).unwrap();
+            assert_eq!(body.get("basic_auth").is_some(), auth.is_some());
+            if let Some(None) = auth {
+                assert!(body["basic_auth"].is_null());
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn analytics_and_forwarding_follow_the_wire_contracts() {
     let resource =
         serde_json::json!({"data":{"destination":null,"verified":false,"verified_at":null}});
