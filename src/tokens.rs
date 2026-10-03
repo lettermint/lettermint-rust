@@ -97,7 +97,7 @@ mod tests {
             "lm_sso_abc",
             "lm_team_abc-def",
             "eyJhbGciOiJIUzI1NiJ9.e30.c2ln",
-            "sk_live_abc",
+            "xk_unknown_abc",
             " lm_abc",
             "lm_abc\n",
             "lm_ab€",

@@ -29,7 +29,7 @@ fn unrecognised_tokens_are_config_errors_without_the_token() {
         "lm_",
         "lm_team_",
         "lm_sso_SsoToken123",
-        "sk_live_abc123",
+        "xk_unknown_abc123",
         "eyJhbGciOiJIUzI1NiJ9.e30.c2ln",
     ] {
         let error = Lettermint::new(token).unwrap_err();
