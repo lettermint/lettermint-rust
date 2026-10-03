@@ -120,6 +120,8 @@ impl HttpResponse {
 ///   [`HttpRequest::timeout`] itself.
 ///
 /// The SDK enforces the timeout around `send` as well.
+// `async_trait` marks the boxed future `#[must_use]`, which newer Clippy reports as `double_must_use`.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Transport: Send + Sync + 'static {
     /// Sends `request` and returns the response with its whole body.
