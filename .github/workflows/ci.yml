@@ -37,15 +37,12 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Check release version
-        if: runner.os == 'Linux' && github.event_name == 'release'
+      - name: Set release version
+        if: github.event_name == 'release'
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
-          test "$version" = "$package_version"
+        run: .github/scripts/set-release-version.sh
 
       - name: Check formatting
         if: runner.os == 'Linux'
@@ -110,8 +107,15 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Set release version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: .github/scripts/set-release-version.sh
+
       - name: Build package
-        run: cargo package --locked
+        run: cargo package --locked --allow-dirty
 
       - name: Upload package
         uses: actions/upload-artifact@v7
