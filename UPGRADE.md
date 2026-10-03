@@ -371,6 +371,8 @@ The types are generated from the API specification of lettermint#2582 and use it
 
 Every 1.x type in `lettermint::types` whose name changed. Several 1.x types now share one name, because the API uses one schema for them.
 
+| 1.x | 2.0 |
+| --- | --- |
 | `AnalyticsRequest` | `AnalyticsQuery` |
 | `AnalyticsRequestFiltersItem` | `AnalyticsFilter` |
 | `AnalyticsRequestSort` | `AnalyticsSort` |
@@ -419,6 +421,7 @@ Every 1.x type in `lettermint::types` whose name changed. Several 1.x types now 
 | `WebhookStoreResponse` | `WebhookSecretResponse` |
 | `WebhookTestResponse` | `TestWebhookResponse` |
 | `WebhookUpdateResponse` | `WebhookMutationResponse` |
+
 ### Removed types
 
 lettermint#2582 removed these schemas from the API specification:
