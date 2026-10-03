@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
+fn deserialize_webhook_basic_auth<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<WebhookBasicAuthData>>, D::Error> {
+    Option::<WebhookBasicAuthData>::deserialize(deserializer).map(Some)
+}
+
 /// A reusable exact-match message tag.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MessageTag {
@@ -958,6 +964,34 @@ pub struct StoreSuppressionData {
     pub applies_to: Option<SuppressionAppliesTo>,
 }
 
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebhookBasicAuthData {
+    pub username: String,
+    pub password: String,
+}
+
+impl std::fmt::Debug for WebhookBasicAuthData {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WebhookBasicAuthData")
+            .field("username", &"<redacted>")
+            .field("password", &"<redacted>")
+            .finish()
+    }
+}
+
+/// Complete literals from the previous interface need `basic_auth` or `..Default::default()`.
+///
+/// ```compile_fail,E0063
+/// use lettermint::types::StoreWebhookData;
+/// let request = StoreWebhookData {
+///     name: String::new(), url: String::new(), events: vec![],
+///     enabled: None, include_machine_events: None, scope: None,
+///     project_ids: None, route_ids: None, route_id: None, delivery_mode_filter: None,
+/// };
+/// ```
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StoreWebhookData {
@@ -978,6 +1012,12 @@ pub struct StoreWebhookData {
     pub route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_mode_filter: Option<WebhookDeliveryModeFilter>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_webhook_basic_auth",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub basic_auth: Option<Option<WebhookBasicAuthData>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1252,6 +1292,12 @@ pub struct UpdateWebhookData {
     pub route_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_mode_filter: Option<WebhookDeliveryModeFilter>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_webhook_basic_auth",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub basic_auth: Option<Option<WebhookBasicAuthData>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1273,6 +1319,7 @@ pub struct WebhookData {
     pub created_at: String,
     pub updated_at: String,
     pub delivery_mode_filter: WebhookDeliveryModeFilter,
+    pub has_basic_auth: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -1412,6 +1459,7 @@ pub struct WebhookListData {
     pub last_called_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub has_basic_auth: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -1445,6 +1493,7 @@ pub struct WebhookSecretData {
     pub created_at: String,
     pub updated_at: String,
     pub delivery_mode_filter: WebhookDeliveryModeFilter,
+    pub has_basic_auth: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
