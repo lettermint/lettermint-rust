@@ -1,6 +1,6 @@
 [package]
 name = "lettermint"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.98"
 authors = ["Lettermint <help@lettermint.co>"]
@@ -8,20 +8,26 @@ license = "MIT OR Apache-2.0"
 description = "Official Rust SDK for the Lettermint email and team APIs."
 homepage = "https://lettermint.co"
 repository = "https://github.com/lettermint/lettermint-rust"
+documentation = "https://docs.rs/lettermint"
 readme = "README.md"
 keywords = ["lettermint", "email", "sdk", "api"]
 categories = ["api-bindings", "email"]
+include = ["/src", "/README.md", "/UPGRADE.md", "/LICENSE-APACHE", "/LICENSE-MIT", "/CHANGELOG.md"]
 
 [dependencies]
 async-trait = "0.1"
+base64 = "0.22"
+form_urlencoded = "1"
+futures-core = "0.3"
 hex = "0.4"
 hmac = "0.13"
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+http = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 thiserror = "2"
-urlencoding = "2"
+tokio = { version = "1", default-features = false, features = ["time"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
