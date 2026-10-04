@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.0 - 2026-10-04
+
+### What's Changed
+
+* feat(webhooks)!: add nullable Basic Auth fields and safe read flags by @bjarn in https://github.com/lettermint/lettermint-rust/pull/11
+* feat!: Lettermint Rust SDK 2.0 by @bjarn in https://github.com/lettermint/lettermint-rust/pull/12
+
+**Full Changelog**: https://github.com/lettermint/lettermint-rust/compare/v1.1.0...v2.0.0
+
 ## v1.0.0 - 2026-09-19
 
 ### Added
