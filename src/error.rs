@@ -61,7 +61,8 @@ pub enum Error {
     #[error("{0}")]
     RateLimit(ApiError),
 
-    /// HTTP 5xx with a JSON or empty body.
+    /// HTTP 5xx with a JSON or empty body. [`ApiError::retry_after`] holds the `Retry-After`
+    /// delay when the API sent one, as an analytics 503 can.
     #[error("{0}")]
     Server(ApiError),
 
@@ -267,7 +268,7 @@ impl ApiError {
     }
 
     /// How long to wait, from the `Retry-After` header (seconds or an HTTP date), when the API
-    /// sent one (HTTP 429).
+    /// sent one (HTTP 429 or 5xx).
     pub fn retry_after(&self) -> Option<Duration> {
         self.inner.retry_after
     }
