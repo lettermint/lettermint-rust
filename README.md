@@ -299,7 +299,7 @@ let html = lettermint.messages().html("message-id").await?;
 | `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
 | `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)` |
-| (the client) | `ping`, `analytics`, `blocked_file_types` |
+| (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
 
 Request types that have required enum fields have a `new` constructor with the required fields, for example `StoreRouteData::new("Inbound", RouteType::Inbound)`.
 
@@ -347,6 +347,74 @@ The paginator requests the next page only when you get to it; drop it to stop ea
 
 IDs in paths are URL-encoded. An empty ID, `.` or `..` is an `Error::Config`, returned before the request.
 
+### Analytics
+
+`lettermint.analytics(&query)` runs one analytics query. `metrics` is the only required field; by default the API returns a summary of the last 30 days:
+
+```rust,no_run
+# use lettermint::Lettermint;
+use lettermint::types::{AnalyticsMetric, AnalyticsQuery};
+
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let result = lettermint
+    .analytics(&AnalyticsQuery {
+        metrics: vec![AnalyticsMetric::Delivered, AnalyticsMetric::Bounced, AnalyticsMetric::DeliveryRate],
+        from: Some("2026-10-01".into()),
+        to: Some("2026-10-31".into()),
+        timezone: Some("Europe/Amsterdam".into()),
+        ..Default::default()
+    })
+    .await?;
+
+if let Some(summary) = &result.data.summary {
+    println!("{:?}", summary.metrics.delivery_rate); // Some(Some(0.9836)), or Some(None) when there is no data
+}
+println!("{} {}", result.meta.partial, result.meta.effective_to);
+# Ok(())
+# }
+```
+
+Add `include` to ask for a `time_series` or a `breakdown`. A breakdown needs `group_by`, and the API returns its rows in pages of `limit` (at most 200). `analytics_pages()` follows `pagination.next_cursor` for you. It returns a `Paginator` that yields one whole response per request, so each page keeps its `meta` and `pagination`:
+
+```rust,no_run
+# use lettermint::Lettermint;
+use lettermint::types::{
+    AnalyticsBreakdownRow, AnalyticsGroupDimension, AnalyticsMetric, AnalyticsQuery, AnalyticsSection, AnalyticsSort,
+    AnalyticsSortDirection,
+};
+
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let query = AnalyticsQuery {
+    metrics: vec![AnalyticsMetric::Delivered, AnalyticsMetric::Bounced],
+    include: Some(vec![AnalyticsSection::Breakdown]),
+    group_by: Some(vec![AnalyticsGroupDimension::RecipientDomain]),
+    sort: Some(AnalyticsSort::new(AnalyticsMetric::Bounced, AnalyticsSortDirection::Desc)),
+    limit: Some(200),
+    ..Default::default()
+};
+
+let mut rows: Vec<AnalyticsBreakdownRow> = Vec::new();
+let mut pages = lettermint.analytics_pages(&query);
+while let Some(page) = pages.next().await {
+    let page = page?;
+    if page.pagination.truncated {
+        eprintln!("More groups exist than the API ranks.");
+    }
+    rows.extend(page.data.breakdown.unwrap_or_default());
+}
+# Ok(())
+# }
+```
+
+A cursor expires 60 seconds after its response, so read the next page promptly. An expired cursor is an `Error::Validation` with `errors()["cursor"]`; run the query again to start over.
+
+A few things to know when you read a response:
+
+- A metric is `Some(None)` (the API's `null`) when the API cannot measure it for that row or bucket, and a rate is `Some(None)` when its denominator is zero. `Some(Some(0))` means a measured zero. A metric the query did not select is `None`.
+- `data.summary`, `data.time_series` and `data.breakdown` are `Some` only when `include` asks for them. `previous`, `change` and `meta.comparison` are `Some` only with `compare`.
+- `smtp_response_group` can be used in `group_by` but not as a filter dimension.
+- Analytics can answer `503` or `504` when a query takes too long or the service is busy. Both are an `Error::Server`; see [Errors](#errors).
+
 ### Cancellation and timeouts
 
 Futures are cancelled by dropping them, for example with `tokio::time::timeout` or `tokio::select!`. Each request also has the client's timeout (30 seconds by default), which covers the response headers and the body; use `lettermint.with_timeout(duration)?` for a client with another one.
@@ -363,7 +431,7 @@ Every method returns `lettermint::Result<T>`, with `lettermint::Error`:
 | `Conflict(ApiError)` | HTTP 409 | |
 | `Validation(ApiError)` | HTTP 422 | `errors()` holds the field errors |
 | `RateLimit(ApiError)` | HTTP 429 | `retry_after()` holds the `Retry-After` delay |
-| `Server(ApiError)` | HTTP 5xx | |
+| `Server(ApiError)` | HTTP 5xx | `retry_after()` holds the `Retry-After` delay, when the API sent one |
 | `Api(ApiError)` | Any other 4xx | |
 | `Timeout { timeout }` | No complete response within the timeout | |
 | `Connection { source }` | The request failed (DNS, TLS, refused, reset) | |

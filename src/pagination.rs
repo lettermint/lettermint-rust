@@ -1,4 +1,4 @@
-//! [`Paginator`]: every item of a cursor-paginated list.
+//! [`Paginator`]: every item of a cursor-paginated list, or every page of an analytics query.
 
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
@@ -9,9 +9,10 @@ use std::task::{Context, Poll};
 use futures_core::Stream;
 
 use crate::error::Result;
-use crate::generated::types::CursorPage;
 
-type PageFuture<T> = Pin<Box<dyn Future<Output = Result<CursorPage<T>>> + Send>>;
+/// The items of one page and the cursor of the next page.
+pub(crate) type Page<T> = (Vec<T>, Option<String>);
+type PageFuture<T> = Pin<Box<dyn Future<Output = Result<Page<T>>> + Send>>;
 type FetchPage<T> = Box<dyn FnMut(Option<String>) -> PageFuture<T> + Send>;
 
 /// Every item of a cursor-paginated list, one page request at a time.
@@ -20,6 +21,9 @@ type FetchPage<T> = Box<dyn FnMut(Option<String>) -> PageFuture<T> + Send>;
 /// [`Domains::iterate`](crate::resources::Domains::iterate). It requests the first page when
 /// you ask for the first item, follows `next_cursor` until it is `None`, and stops when the API
 /// repeats a cursor. After an error it ends.
+///
+/// [`Lettermint::analytics_pages`](crate::Lettermint::analytics_pages) returns one whose items
+/// are whole analytics responses, one per request.
 ///
 /// Read it with the inherent [`next`](Self::next) method, or as a [`Stream`] (for example with
 /// `futures::StreamExt` or `tokio_stream::StreamExt`). Dropping it stops the iteration and
@@ -58,6 +62,12 @@ impl<T> Paginator<T> {
         }
     }
 
+    /// Treats `cursor` as used: the paginator stops when the API returns it.
+    pub(crate) fn after_cursor(mut self, cursor: Option<String>) -> Self {
+        self.seen.extend(cursor);
+        self
+    }
+
     /// The next item, `None` after the last one.
     pub async fn next(&mut self) -> Option<Result<T>> {
         std::future::poll_fn(|context| Pin::new(&mut *self).poll_next(context)).await
@@ -88,10 +98,10 @@ impl<T> Stream for Paginator<T> {
                     this.done = true;
                     return Poll::Ready(Some(Err(error)));
                 }
-                Poll::Ready(Ok(page)) => {
+                Poll::Ready(Ok((items, next_cursor))) => {
                     this.pending = None;
-                    this.buffer.extend(page.data);
-                    match page.next_cursor {
+                    this.buffer.extend(items);
+                    match next_cursor {
                         Some(next) if !next.is_empty() && this.seen.insert(next.clone()) => {
                             this.cursor = Some(next)
                         }

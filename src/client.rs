@@ -161,6 +161,32 @@ impl Lettermint {
             .await
     }
 
+    /// Queries email analytics and follows `pagination.next_cursor`: the [`Paginator`] yields one
+    /// whole response per request. Each response carries the next page of `data.breakdown` with
+    /// its own `meta` and `pagination`. Needs the team token.
+    ///
+    /// A cursor expires 60 seconds after its response, so ask for the next page promptly; an
+    /// expired cursor is an [`Error::Validation`](crate::Error::Validation). `query` is not
+    /// changed: the paginator sends copies of it.
+    pub fn analytics_pages(&self, query: &AnalyticsQuery) -> Paginator<AnalyticsResponse> {
+        let client = self.clone();
+        let query = query.clone();
+        let start = query.cursor.clone();
+        Paginator::new(move |cursor: Option<String>| {
+            let client = client.clone();
+            let mut query = query.clone();
+            Box::pin(async move {
+                if cursor.is_some() {
+                    query.cursor = cursor;
+                }
+                let page = client.analytics(&query).await?;
+                let next_cursor = page.pagination.next_cursor.clone();
+                Ok((vec![page], next_cursor))
+            })
+        })
+        .after_cursor(start)
+    }
+
     /// The file extensions and MIME types that cannot be attached. Needs the team token.
     pub async fn blocked_file_types(&self) -> Result<BlockedFileTypes> {
         self.call::<ops::ListBlockedFileTypes>(
@@ -237,7 +263,7 @@ impl Lettermint {
                     crate::query::set_param(&mut params, name, &cursor);
                 }
                 let path: Vec<&str> = path.iter().map(String::as_str).collect();
-                client
+                let page = client
                     .execute::<crate::generated::types::CursorPage<E::Item>, ()>(
                         E::OPERATION,
                         label,
@@ -246,7 +272,8 @@ impl Lettermint {
                         None,
                         CallOptions::default(),
                     )
-                    .await
+                    .await?;
+                Ok((page.data, page.next_cursor))
             })
         })
     }

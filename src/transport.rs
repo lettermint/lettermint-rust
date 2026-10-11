@@ -546,7 +546,7 @@ fn api_error(
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("HTTP {status}"))
         });
-    let retry_after = if status == 429 {
+    let retry_after = if status == 429 || status >= 500 {
         headers
             .get(http::header::RETRY_AFTER)
             .and_then(|value| value.to_str().ok())
@@ -714,6 +714,34 @@ mod tests {
         assert_eq!(api.retry_after(), Some(Duration::from_secs(12)));
         assert_eq!(api.message(), "Too Many Requests");
         assert!(error.is_retryable());
+    }
+
+    #[test]
+    fn server_errors_read_retry_after() {
+        let now = SystemTime::now();
+        let at = SystemTime::UNIX_EPOCH + Duration::from_secs(1_791_028_790);
+        for (status, value, expected) in [
+            (503, "2", Some(Duration::from_secs(2))),
+            (
+                502,
+                "Sat, 03 Oct 2026 12:00:00 GMT",
+                Some(Duration::from_secs(10)),
+            ),
+            (503, "soon", None),
+        ] {
+            let error = api_error(status, &headers(&[("retry-after", value)]), None, at);
+            let Error::Server(api) = &error else {
+                panic!("{error:?}")
+            };
+            assert_eq!(api.retry_after(), expected, "{status} {value}");
+        }
+        for status in [500, 504] {
+            let error = api_error(status, &HeaderMap::new(), None, now);
+            assert_eq!(error.api_error().unwrap().retry_after(), None);
+        }
+        // Only 429 and 5xx read the header.
+        let error = api_error(404, &headers(&[("retry-after", "2")]), None, now);
+        assert_eq!(error.api_error().unwrap().retry_after(), None);
     }
 
     #[test]

@@ -137,6 +137,26 @@ async fn error_statuses_are_typed() {
 }
 
 #[tokio::test]
+async fn server_errors_read_retry_after() {
+    let transport = MockTransport::new();
+    transport.reply(
+        Reply::json(503, json!({"message": "Service Unavailable"})).header("retry-after", "2"),
+    );
+    let error = send(&transport).await.unwrap_err();
+    let Error::Server(api) = &error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(api.retry_after(), Some(Duration::from_secs(2)));
+
+    transport.reply(Reply::json(500, json!({"message": "Server Error"})));
+    let error = send(&transport).await.unwrap_err();
+    let Error::Server(api) = &error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(api.retry_after(), None);
+}
+
+#[tokio::test]
 async fn tokens_are_removed_from_error_bodies_and_messages() {
     let transport = MockTransport::new();
     let echo = json!({"message": format!("bad token {SENDING_TOKEN}"), "errors": {"token": [SENDING_TOKEN]}, "nested": {"list": [format!("x{SENDING_TOKEN}x")]}});

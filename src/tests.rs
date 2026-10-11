@@ -78,6 +78,13 @@ async fn every_operation_is_reachable() {
             ..Default::default()
         })
         .await;
+    let _ = client
+        .analytics_pages(&AnalyticsQuery {
+            metrics: vec![AnalyticsMetric::Delivered],
+            ..Default::default()
+        })
+        .next()
+        .await;
     let _ = client.blocked_file_types().await;
 
     let emails = client.emails();
