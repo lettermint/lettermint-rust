@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.0 - 2026-10-11
+
+### What's Changed
+
+* feat: add analytics_pages, retry_after on server errors and the latest API types by @bjarn in https://github.com/lettermint/lettermint-rust/pull/13
+
+**Full Changelog**: https://github.com/lettermint/lettermint-rust/compare/v2.0.0...v2.1.0
+
 ## v2.0.0 - 2026-10-04
 
 ### What's Changed
