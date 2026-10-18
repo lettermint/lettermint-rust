@@ -1632,8 +1632,8 @@ pub struct MessageData {
     pub route_id: String,
     pub created_at: String,
     /// The ID of the message this message resent. Null when it is not a resend
-    #[serde(deserialize_with = "support::required_nullable")]
-    pub resent_from_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "support::optional_nullable")]
+    pub resent_from_message_id: Option<Option<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
