@@ -49,7 +49,8 @@ pub enum Error {
     NotFound(ApiError),
 
     /// HTTP 409: the request conflicts with the current state, for example an
-    /// `Idempotency-Key` reused with a different body.
+    /// `Idempotency-Key` reused with a different body, or a batch email's `idempotency_key`
+    /// reused with different content (code `IDEMPOTENCY_CONFLICT`).
     #[error("{0}")]
     Conflict(ApiError),
 

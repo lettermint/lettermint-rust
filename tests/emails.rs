@@ -2,7 +2,8 @@ mod common;
 
 use common::*;
 use lettermint::types::{
-    MessageTagInput, SandboxResult, SendMailRequest, SendMailRequestSettings, TlsPolicy,
+    MessageTagInput, SandboxResult, SendBatchMailItem, SendMailRequest, SendMailRequestSettings,
+    TlsPolicy,
 };
 use lettermint::{Attachment, Error, SendOptions};
 use serde_json::json;
@@ -295,6 +296,171 @@ async fn batches_are_posted_as_an_array() {
     assert_eq!(target(&request), "/send/batch");
     assert_eq!(header(&request, "idempotency-key"), Some("batch-1"));
     assert_eq!(body_json(&request)[1]["subject"], "Built");
+}
+
+#[tokio::test]
+async fn batch_items_carry_their_own_idempotency_keys() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        202,
+        json!([{"message_id": "m1", "status": "pending"}, {"message_id": "m2", "status": "pending"}]),
+    ));
+    let emails = sending_client(&transport).emails();
+    let built = emails
+        .compose()
+        .from("a@example.com")
+        .to("b@example.com")
+        .subject("Built")
+        .build()
+        .unwrap();
+    let items = [
+        SendBatchMailItem {
+            idempotency_key: Some("order-1".into()),
+            ..minimal().into()
+        },
+        built.into(),
+    ];
+    let responses = emails
+        .send_batch_items(&items, SendOptions::new().idempotency_key("batch-1"))
+        .await
+        .unwrap();
+    assert_eq!(responses.len(), 2);
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/send/batch");
+    assert_eq!(header(&request, "x-lettermint-token"), Some(SENDING_TOKEN));
+    // The header covers the request; each key travels in its own item.
+    assert_eq!(header(&request, "idempotency-key"), Some("batch-1"));
+    assert_eq!(
+        body_json(&request),
+        json!([
+            {"from": "hello@acme.com", "to": ["jane@example.com"], "subject": "Hi", "text": "Hello", "idempotency_key": "order-1"},
+            {"from": "a@example.com", "to": ["b@example.com"], "subject": "Built"}
+        ])
+    );
+
+    let one = Reply::json(202, json!([{"message_id": "m3", "status": "pending"}]));
+    transport.reply(one.clone());
+    // Without a header option, only the item keys are sent.
+    emails
+        .send_batch_items(&items[..1], SendOptions::new())
+        .await
+        .unwrap();
+    let request = transport.last();
+    assert_eq!(header(&request, "idempotency-key"), None);
+    assert_eq!(body_json(&request)[0]["idempotency_key"], "order-1");
+
+    // send() and send_batch() never send an idempotency_key field.
+    emails.send(&minimal(), SendOptions::new()).await.unwrap();
+    assert!(
+        body_json(&transport.last())
+            .get("idempotency_key")
+            .is_none()
+    );
+    transport.reply(one);
+    emails
+        .send_batch(&[minimal()], SendOptions::new())
+        .await
+        .unwrap();
+    assert!(
+        body_json(&transport.last())[0]
+            .get("idempotency_key")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn batch_item_keys_are_checked_before_the_request() {
+    let transport = MockTransport::new();
+    let emails = sending_client(&transport).emails();
+    let item = |key: Option<String>| SendBatchMailItem {
+        idempotency_key: key,
+        ..minimal().into()
+    };
+    for (items, expected, needle) in [
+        (
+            vec![item(Some("a".into())), item(Some("a".into()))],
+            "messages[1].idempotency_key",
+            "unique",
+        ),
+        (
+            vec![item(Some(String::new()))],
+            "messages[0].idempotency_key",
+            "1 to 255",
+        ),
+        (
+            vec![item(None), item(Some("k".repeat(256)))],
+            "messages[1].idempotency_key",
+            "1 to 255",
+        ),
+    ] {
+        let error = emails
+            .send_batch_items(&items, SendOptions::new())
+            .await
+            .unwrap_err();
+        let Error::InvalidInput(input) = &error else {
+            panic!("{error:?}")
+        };
+        assert_eq!(input.field(), expected);
+        assert!(input.message().contains(needle), "{}", input.message());
+    }
+    let mut tagged = item(None);
+    tagged.tags = Some(vec![("bad name", "x").into()]);
+    let error = emails
+        .send_batch_items(&[item(None), tagged], SendOptions::new())
+        .await
+        .unwrap_err();
+    let Error::InvalidInput(input) = &error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(input.field(), "messages[1].tags");
+    assert_eq!(transport.count(), 0);
+
+    // 255 characters (not bytes) is the limit; items without keys need none.
+    transport.reply(Reply::json(202, json!([])));
+    emails
+        .send_batch_items(
+            &[item(Some("é".repeat(255))), item(None), item(None)],
+            SendOptions::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(transport.count(), 1);
+}
+
+#[tokio::test]
+async fn batch_conflicts_and_partial_failures_expose_the_details() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        409,
+        json!({"error": {"code": "IDEMPOTENCY_CONFLICT", "message": "The idempotency key was already used with different content.", "details": {"index": 0}}}),
+    ));
+    transport.reply(Reply::json(
+        500,
+        json!({"error": {"code": "INTERNAL_ERROR", "message": "Server Error", "details": {"accepted": [{"index": 0, "message_id": "m1"}]}}}),
+    ));
+    let emails = sending_client(&transport).emails();
+    let items = [SendBatchMailItem {
+        idempotency_key: Some("order-1".into()),
+        ..minimal().into()
+    }];
+    let error = emails
+        .send_batch_items(&items, SendOptions::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Conflict(_)), "{error:?}");
+    assert_eq!(error.code(), Some("IDEMPOTENCY_CONFLICT"));
+
+    let error = emails
+        .send_batch_items(&items, SendOptions::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Server(_)), "{error:?}");
+    let details = error.api_error().unwrap().details().unwrap();
+    assert_eq!(
+        details["accepted"],
+        json!([{"index": 0, "message_id": "m1"}])
+    );
 }
 
 #[tokio::test]
