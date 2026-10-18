@@ -190,6 +190,22 @@ let results = emails.send_batch(&[first, second], SendOptions::new()).await?;
 # }
 ```
 
+To make each email safe to send again, give it its own idempotency key with `send_batch_items`. Convert a message or a built builder with `.into()`:
+
+```rust,no_run
+# use lettermint::{Lettermint, SendOptions, types::{SendBatchMailItem, SendMailRequest}};
+# async fn run(lettermint: Lettermint, first: SendMailRequest, second: SendMailRequest) -> lettermint::Result<()> {
+let items = [
+    SendBatchMailItem { idempotency_key: Some("order-1234-confirmation".into()), ..first.into() },
+    SendBatchMailItem { idempotency_key: Some("order-1235-confirmation".into()), ..second.into() },
+];
+let results = lettermint.emails().send_batch_items(&items, SendOptions::new()).await?;
+# Ok(())
+# }
+```
+
+If an email with the same key and content was accepted in the last 24 hours, the API returns its original result and does not send it again, also in a later batch. Keys must be unique within a batch (1 to 255 characters; the SDK checks this before the request). Reusing a key with different content rejects the whole batch with `Error::Conflict` (code `IDEMPOTENCY_CONFLICT`) and sends nothing. If an email fails after earlier ones were accepted, `error.api_error().and_then(|e| e.details())` lists the accepted emails under `accepted`, with their `index` and `message_id`.
+
 ### Idempotency
 
 Pass an idempotency key to make retries safe. The API processes a key once, so a retry with the same key does not send the email again. The key applies only to the call it is passed to.

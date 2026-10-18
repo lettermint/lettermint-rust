@@ -10,12 +10,13 @@ use crate::client::Lettermint;
 use crate::error::{InputError, Result};
 use crate::generated::operations::{self as ops, AuthSurface};
 use crate::generated::types::{
-    MessageAttachmentInput, MessageTagInput, SandboxResult, SendBatchMailResponse, SendMailRequest,
-    SendMailRequestSettings, SendMailResponse,
+    MessageAttachmentInput, MessageTagInput, SandboxResult, SendBatchMailItem,
+    SendBatchMailResponse, SendMailRequest, SendMailRequestSettings, SendMailResponse,
 };
 use crate::transport::CallOptions;
 
 const MAX_TAGS: usize = 20;
+const MAX_BATCH_IDEMPOTENCY_KEY: usize = 255;
 
 /// Options of a send: an idempotency key and a timeout for this call.
 ///
@@ -88,7 +89,12 @@ impl Emails {
             .await
     }
 
-    /// Sends up to 500 emails in one request. Use [`EmailBuilder::build`] to add a builder.
+    /// Sends up to 500 emails in one request. Use [`EmailBuilder::build`] to add a builder, and
+    /// [`send_batch_items`](Self::send_batch_items) to give emails their own idempotency keys.
+    ///
+    /// If an email fails after earlier ones were accepted, the error's
+    /// [`ApiError::details`](crate::ApiError::details) lists the accepted emails under
+    /// `accepted` (their `index` and `message_id`).
     pub async fn send_batch(
         &self,
         messages: &[SendMailRequest],
@@ -104,6 +110,52 @@ impl Emails {
                 "emails.send_batch",
                 &[],
                 messages,
+                options.into_call(),
+            )
+            .await
+    }
+
+    /// Sends up to 500 emails in one request, each with an optional `idempotency_key` of its
+    /// own. Convert a message (or a built [`EmailBuilder`]) with `.into()`:
+    ///
+    /// ```no_run
+    /// # async fn run(lettermint: lettermint::Lettermint, message: lettermint::types::SendMailRequest) -> lettermint::Result<()> {
+    /// use lettermint::SendOptions;
+    /// use lettermint::types::SendBatchMailItem;
+    ///
+    /// let items = [SendBatchMailItem {
+    ///     idempotency_key: Some("order-1234-confirmation".into()),
+    ///     ..message.into()
+    /// }];
+    /// lettermint.emails().send_batch_items(&items, SendOptions::new()).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// When an email with the same key and content was accepted in the last 24 hours, the API
+    /// returns its original result and does not send it again, also in a later batch. Reusing a
+    /// key with different content, or while that email is still being processed, rejects the
+    /// whole batch with [`Error::Conflict`](crate::Error::Conflict) and sends nothing. Keys are
+    /// checked before the request: 1 to 255 characters and unique within the batch. The
+    /// `Idempotency-Key` header from [`SendOptions::idempotency_key`] still covers the request
+    /// as a whole.
+    ///
+    /// If an email fails after earlier ones were accepted, the error's
+    /// [`ApiError::details`](crate::ApiError::details) lists the accepted emails under
+    /// `accepted` (their `index` and `message_id`).
+    pub async fn send_batch_items(
+        &self,
+        items: &[SendBatchMailItem],
+        options: SendOptions,
+    ) -> Result<SendBatchMailResponse> {
+        self.client
+            .assert_auth("emails.send_batch_items", AuthSurface::Sending)?;
+        validate_batch_items(items)?;
+        self.client
+            .call_with::<ops::SendBatchMail, _>(
+                "emails.send_batch_items",
+                &[],
+                items,
                 options.into_call(),
             )
             .await
@@ -399,6 +451,51 @@ impl<N: Into<String>, V: Into<String>> From<(N, V)> for MessageTagInput {
     }
 }
 
+/// A message as a batch item without an idempotency key, for [`Emails::send_batch_items`].
+impl From<SendMailRequest> for SendBatchMailItem {
+    fn from(message: SendMailRequest) -> Self {
+        let SendMailRequest {
+            route,
+            from,
+            to,
+            cc,
+            bcc,
+            reply_to,
+            subject,
+            scheduled_at,
+            sandbox_result,
+            headers,
+            metadata,
+            tag,
+            tags,
+            settings,
+            html,
+            text,
+            attachments,
+        } = message;
+        Self {
+            route,
+            from,
+            to,
+            cc,
+            bcc,
+            reply_to,
+            subject,
+            scheduled_at,
+            sandbox_result,
+            headers,
+            metadata,
+            tag,
+            tags,
+            settings,
+            html,
+            text,
+            attachments,
+            idempotency_key: None,
+        }
+    }
+}
+
 /// An attachment for [`EmailBuilder::attach`].
 ///
 /// ```
@@ -461,6 +558,41 @@ impl From<Attachment> for MessageAttachmentInput {
 /// Checks what the SDK can check before a request: tags and attachments. `prefix` names the
 /// message in error fields (`messages[2]`).
 pub(crate) fn validate_message(message: &SendMailRequest, prefix: &str) -> Result<(), InputError> {
+    validate_content(&message.tag, &message.tags, &message.attachments, prefix)
+}
+
+/// Validates every item of a batch like [`validate_message`], and their idempotency keys: 1 to
+/// 255 characters and unique within the batch.
+pub(crate) fn validate_batch_items(items: &[SendBatchMailItem]) -> Result<(), InputError> {
+    let mut keys = HashSet::new();
+    for (index, item) in items.iter().enumerate() {
+        let prefix = format!("messages[{index}]");
+        validate_content(&item.tag, &item.tags, &item.attachments, &prefix)?;
+        if let Some(key) = &item.idempotency_key {
+            let field = || format!("{prefix}.idempotency_key");
+            if !(1..=MAX_BATCH_IDEMPOTENCY_KEY).contains(&key.chars().count()) {
+                return Err(InputError::new(
+                    field(),
+                    "An idempotency key must be 1 to 255 characters.",
+                ));
+            }
+            if !keys.insert(key.as_str()) {
+                return Err(InputError::new(
+                    field(),
+                    "Idempotency keys must be unique within a batch.",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_content(
+    tag: &Option<Option<String>>,
+    tags: &Option<Vec<MessageTagInput>>,
+    attachments: &Option<Vec<MessageAttachmentInput>>,
+    prefix: &str,
+) -> Result<(), InputError> {
     let at = |field: &str| {
         if prefix.is_empty() {
             field.to_owned()
@@ -468,12 +600,12 @@ pub(crate) fn validate_message(message: &SendMailRequest, prefix: &str) -> Resul
             format!("{prefix}.{field}")
         }
     };
-    let has_legacy_tag = matches!(&message.tag, Some(Some(tag)) if !tag.is_empty());
-    if let Some(tags) = &message.tags {
+    let has_legacy_tag = matches!(tag, Some(Some(tag)) if !tag.is_empty());
+    if let Some(tags) = tags {
         validate_tags(tags, has_legacy_tag)
             .map_err(|message| InputError::new(at("tags"), message))?;
     }
-    if let Some(attachments) = &message.attachments {
+    if let Some(attachments) = attachments {
         for (index, attachment) in attachments.iter().enumerate() {
             if attachment.filename.is_empty() {
                 return Err(InputError::new(
