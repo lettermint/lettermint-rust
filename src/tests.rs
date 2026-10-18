@@ -119,6 +119,9 @@ async fn every_operation_is_reachable() {
     let _ = messages.reschedule("m", &Default::default()).await;
     let _ = messages.cancel("m").await;
     let _ = messages.process("m", SendOptions::new()).await;
+    let _ = messages
+        .resend("m", &Default::default(), SendOptions::new())
+        .await;
 
     let projects = client.projects();
     let _ = projects.list(&Default::default()).await;
@@ -199,7 +202,7 @@ async fn every_operation_is_reachable() {
         .iter()
         .map(|operation| operation.key.to_owned())
         .collect();
-    assert_eq!(table.len(), 58);
+    assert_eq!(table.len(), 59);
     let missing: Vec<_> = table.difference(&reached).collect();
     assert!(missing.is_empty(), "not reachable: {missing:?}");
     assert_eq!(reached, table);

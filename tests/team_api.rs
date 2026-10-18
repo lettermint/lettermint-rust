@@ -4,7 +4,8 @@ use common::*;
 use futures_core::Stream;
 use lettermint::types::{
     GetDomainQueryIncludeItem, GetStatsQuery, ListDomainsQuery, ListDomainsQuerySortItem,
-    ListWebhookDeliveriesQuery, MessageStatus, RescheduleMessageRequest, StoreDomainData,
+    ListWebhookDeliveriesQuery, MessageStatus, RescheduleMessageRequest, ResendMessageRequest,
+    StoreDomainData,
 };
 use lettermint::{Error, SendOptions};
 use serde_json::{Value, json};
@@ -194,6 +195,90 @@ async fn process_takes_an_idempotency_key_and_sends_no_body() {
     assert_eq!(target(&request), "/messages/m1/process");
     assert_eq!(request.body, None);
     assert_eq!(header(&request, "idempotency-key"), Some("process-m1"));
+}
+
+#[tokio::test]
+async fn resend_posts_the_recipients_with_an_idempotency_key() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        202,
+        json!({"message_id": "m2", "status": "pending"}),
+    ));
+    let pending = team_client(&transport)
+        .messages()
+        .resend(
+            "m1",
+            &ResendMessageRequest {
+                recipients: Some(vec!["jane@example.com".into()]),
+            },
+            SendOptions::new().idempotency_key("resend-m1"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pending.message_id, "m2");
+    assert_eq!(pending.status, "pending");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/messages/m1/resend");
+    assert_eq!(
+        header(&request, "authorization"),
+        Some(format!("Bearer {TEAM_TOKEN}").as_str())
+    );
+    assert_eq!(header(&request, "idempotency-key"), Some("resend-m1"));
+    assert_eq!(
+        body_json(&request),
+        json!({"recipients": ["jane@example.com"]})
+    );
+}
+
+#[tokio::test]
+async fn resend_to_every_recipient_sends_an_empty_object() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        202,
+        json!({"message_id": "m2", "status": "pending"}),
+    ));
+    // A sending-only client can resend the email it sent.
+    sending_client(&transport)
+        .messages()
+        .resend("m1", &Default::default(), SendOptions::new())
+        .await
+        .unwrap();
+    let request = transport.last();
+    assert_eq!(target(&request), "/messages/m1/resend");
+    assert_eq!(body_json(&request), json!({}));
+    assert_eq!(header(&request, "content-type"), Some("application/json"));
+    assert_eq!(header(&request, "x-lettermint-token"), Some(SENDING_TOKEN));
+    assert_eq!(header(&request, "idempotency-key"), None);
+
+    let error = sending_client(&transport)
+        .messages()
+        .resend("..", &Default::default(), SendOptions::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Config(_)), "{error:?}");
+    assert_eq!(transport.count(), 1);
+}
+
+#[tokio::test]
+async fn resend_after_the_content_expired_is_an_api_error() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        410,
+        json!({"error": {"code": "MESSAGE_CONTENT_UNAVAILABLE", "message": "The content of this message is no longer available."}}),
+    ));
+    let error = team_client(&transport)
+        .messages()
+        .resend("m1", &Default::default(), SendOptions::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Api(_)), "{error:?}");
+    assert_eq!(error.status(), Some(410));
+    assert_eq!(error.code(), Some("MESSAGE_CONTENT_UNAVAILABLE"));
+    assert_eq!(
+        error.api_error().unwrap().message(),
+        "The content of this message is no longer available."
+    );
 }
 
 #[tokio::test]
