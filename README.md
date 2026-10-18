@@ -71,7 +71,7 @@ let lettermint = lettermint::Lettermint::builder()
 # }
 ```
 
-Each part uses its own token and never falls back to the other one. If the token a method needs is missing, it returns `Error::Config` naming the option (``domains.list needs `team_token` ``) before any request. `lettermint.ping()` uses the team token when it is set, otherwise the sending token. `messages().reschedule()` and `messages().cancel()` accept either token in the same way.
+Each part uses its own token and never falls back to the other one. If the token a method needs is missing, it returns `Error::Config` naming the option (``domains.list needs `team_token` ``) before any request. `lettermint.ping()` uses the team token when it is set, otherwise the sending token. `messages().reschedule()`, `messages().cancel()` and `messages().resend()` accept either token in the same way.
 
 You can also pass a single token and let the SDK choose its kind by the format: `lm_team_` followed by letters and digits is a team token, and `lm_` followed by letters and digits is a sending token.
 
@@ -234,6 +234,25 @@ messages.cancel(&result.message_id).await?;
 # }
 ```
 
+### Resending
+
+`messages().resend()` sends the stored content of a sent message again, as a new message with its own ID. Leave `recipients` unset to resend to every original recipient, or pick some of them. The new message's `resent_from_message_id` points to the original.
+
+```rust,no_run
+# use lettermint::{Lettermint, SendOptions, types::ResendMessageRequest};
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let messages = lettermint.messages();
+let resent = messages.resend("message-id", &Default::default(), SendOptions::new()).await?;
+println!("{}", resent.message_id);
+
+let request = ResendMessageRequest { recipients: Some(vec!["jane@example.com".into()]) };
+messages.resend("message-id", &request, SendOptions::new().idempotency_key("resend-jane")).await?;
+# Ok(())
+# }
+```
+
+A message can be resent while its content is retained, and at most 5 times in 24 hours. Once the content is gone the API answers `410 Gone` (`Error::Api` with code `MESSAGE_CONTENT_UNAVAILABLE`).
+
 ### Tags
 
 `tags()` accepts up to 20 case-sensitive name/value tags (19 when the legacy `tag()` is also set). Names match `^[A-Za-z0-9_-]{1,32}$`, may not start with `__lettermint` and must be unique. Values match `^[A-Za-z0-9_-]{1,64}$`. The SDK checks this before the request and returns `Error::InvalidInput` with the field (`tags`, or `messages[2].tags` in a batch).
@@ -289,7 +308,7 @@ let html = lettermint.messages().html("message-id").await?;
 | Method | Methods of the sub-client |
 | --- | --- |
 | `domains()` | `list`, `iterate`, `create`, `retrieve`, `delete`, `verify_dns_records`, `verify_dns_record`, `update_projects` |
-| `messages()` | `list`, `iterate`, `retrieve`, `events`, `iterate_events`, `source`, `html`, `text`, `reschedule`, `cancel`, `process` |
+| `messages()` | `list`, `iterate`, `retrieve`, `events`, `iterate_events`, `source`, `html`, `text`, `reschedule`, `cancel`, `resend`, `process` |
 | `projects()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `rotate_token` (deprecated by the API) |
 | `projects().report_forwarding()` | `retrieve`, `update`, `delete`, `verify`, `resend_code` |
 | `routes()` | `list(project_id, ..)`, `iterate(project_id, ..)`, `create(project_id, ..)`, `retrieve`, `update`, `delete`, `verify_inbound_domain` |

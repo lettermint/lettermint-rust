@@ -4,17 +4,18 @@ use crate::error::Result;
 use crate::generated::operations as ops;
 use crate::generated::types::{
     ListMessageEventsQuery, ListMessageEventsResponse, ListMessagesQuery, ListMessagesResponse,
-    MessageData, MessageEventData, MessageListData, ProcessInboundMessageResponse,
-    RescheduleMessageRequest, ScheduledMessage,
+    MessageData, MessageEventData, MessageListData, PendingSendMailResponse,
+    ProcessInboundMessageResponse, RescheduleMessageRequest, ResendMessageRequest,
+    ScheduledMessage,
 };
 use crate::pagination::Paginator;
 use crate::transport::CallOptions;
 
 /// Sent and received messages. Returned by [`Lettermint::messages`].
 ///
-/// Team token; [`reschedule`](Self::reschedule) and [`cancel`](Self::cancel) also accept the
-/// sending token when no team token is configured, so a sending-only client can cancel the
-/// scheduled email it sent.
+/// Team token; [`reschedule`](Self::reschedule), [`cancel`](Self::cancel) and
+/// [`resend`](Self::resend) also accept the sending token when no team token is configured, so a
+/// sending-only client can cancel or resend the email it sent.
 #[derive(Clone)]
 pub struct Messages {
     client: Lettermint,
@@ -149,6 +150,30 @@ impl Messages {
                 &(),
                 None,
                 CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Sends the stored content of a sent message again, as a new message with its own ID that
+    /// links back through `resent_from_message_id`. Leave `recipients` unset
+    /// (`&Default::default()`) to resend to every original recipient, or list a subset of them.
+    /// Takes an optional idempotency key. Team token if configured, otherwise the sending token.
+    ///
+    /// A message can be resent while its content is retained (afterwards the API answers
+    /// `410 Gone`, returned as [`Error::Api`](crate::Error::Api)) and at most 5 times in 24 hours.
+    pub async fn resend(
+        &self,
+        message_id: &str,
+        body: &ResendMessageRequest,
+        options: SendOptions,
+    ) -> Result<PendingSendMailResponse> {
+        self.client
+            .call::<ops::ResendMessage>(
+                "messages.resend",
+                &[message_id],
+                &(),
+                Some(body),
+                options.into_call(),
             )
             .await
     }
