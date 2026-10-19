@@ -350,6 +350,138 @@ async fn webhook_lists_use_the_cursor_parameter() {
     );
 }
 
+fn delivery_detail(next_retry_at: Option<Value>) -> Value {
+    let mut delivery = json!({"id": "x1", "webhook_id": "w1", "event_type": "message.delivered", "source_scope": "team", "source_project_id": null, "source_route_id": null, "status": "failed", "sandbox": false, "attempt_number": 2, "http_status_code": 500, "duration_ms": 12, "payload": [], "response_body": "boom", "response_headers": null, "error_message": "HTTP 500", "delivered_at": null, "timestamp": "2026-10-01T00:00:00Z"});
+    if let Some(value) = next_retry_at {
+        delivery["next_retry_at"] = value;
+    }
+    delivery
+}
+
+#[tokio::test]
+async fn deliveries_expose_the_next_automatic_retry() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        200,
+        delivery_detail(Some(json!("2026-10-01T00:05:00Z"))),
+    ));
+    transport.reply(Reply::json(200, delivery_detail(Some(Value::Null))));
+    transport.reply(Reply::json(200, delivery_detail(None)));
+    let client = team_client(&transport);
+    let deliveries = client.webhooks().deliveries();
+
+    let scheduled = deliveries.retrieve("w1", "x1").await.unwrap();
+    assert_eq!(
+        scheduled.next_retry_at,
+        Some(Some("2026-10-01T00:05:00Z".into()))
+    );
+    assert_eq!(target(&transport.last()), "/webhooks/w1/deliveries/x1");
+    // null: no automatic retry is scheduled.
+    let none = deliveries.retrieve("w1", "x1").await.unwrap();
+    assert_eq!(none.next_retry_at, Some(None));
+    let absent = deliveries.retrieve("w1", "x1").await.unwrap();
+    assert_eq!(absent.next_retry_at, None);
+}
+
+#[tokio::test]
+async fn retry_delivery_posts_without_a_body() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        202,
+        json!({"message": "Webhook delivery retry queued.", "delivery_id": "x1"}),
+    ));
+    let retried = team_client(&transport)
+        .webhooks()
+        .deliveries()
+        .retry("w1", "x1")
+        .await
+        .unwrap();
+    assert_eq!(retried.message, "Webhook delivery retry queued.");
+    assert_eq!(retried.delivery_id, "x1");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/webhooks/w1/deliveries/x1/retry");
+    assert_eq!(
+        header(&request, "authorization"),
+        Some(format!("Bearer {TEAM_TOKEN}").as_str())
+    );
+    assert_eq!(header(&request, "x-lettermint-token"), None);
+    assert_eq!(header(&request, "idempotency-key"), None);
+    assert_eq!(request.body, None);
+    assert_eq!(header(&request, "content-type"), None);
+}
+
+#[tokio::test]
+async fn retry_delivery_checks_its_path_parameters_and_token() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    for (webhook_id, delivery_id, name) in
+        [("..", "x1", "`webhook_id`"), ("w1", "", "`delivery_id`")]
+    {
+        let error = client
+            .webhooks()
+            .deliveries()
+            .retry(webhook_id, delivery_id)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Config(_)), "{error:?}");
+        assert!(error.to_string().contains(name), "{error}");
+    }
+
+    let error = sending_client(&transport)
+        .webhooks()
+        .deliveries()
+        .retry("w1", "x1")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Config(_)), "{error:?}");
+    assert!(error.to_string().contains("team_token"), "{error}");
+    assert_eq!(transport.count(), 0);
+}
+
+#[tokio::test]
+async fn retry_delivery_conflicts_expose_the_code() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(
+        409,
+        json!({"error": {"code": "WEBHOOK_DELIVERY_NOT_RETRYABLE", "message": "This delivery cannot be retried."}}),
+    ));
+    let error = team_client(&transport)
+        .webhooks()
+        .deliveries()
+        .retry("w1", "x1")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Conflict(_)), "{error:?}");
+    assert_eq!(error.status(), Some(409));
+    assert_eq!(error.code(), Some("WEBHOOK_DELIVERY_NOT_RETRYABLE"));
+    assert_eq!(
+        error.api_error().unwrap().message(),
+        "This delivery cannot be retried."
+    );
+}
+
+#[tokio::test]
+async fn retry_delivery_rate_limits_accept_a_plain_message() {
+    let transport = MockTransport::new();
+    transport.reply(
+        Reply::json(429, json!({"message": "Too Many Attempts."})).header("retry-after", "30"),
+    );
+    let error = team_client(&transport)
+        .webhooks()
+        .deliveries()
+        .retry("w1", "x1")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::RateLimit(_)), "{error:?}");
+    assert_eq!(error.code(), None);
+    assert_eq!(error.api_error().unwrap().message(), "Too Many Attempts.");
+    assert_eq!(
+        error.api_error().unwrap().retry_after(),
+        Some(std::time::Duration::from_secs(30))
+    );
+}
+
 #[tokio::test]
 async fn iterate_is_a_stream_and_ends_after_an_error() {
     let transport = MockTransport::new();

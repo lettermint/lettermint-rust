@@ -333,8 +333,10 @@ let html = lettermint.messages().html("message-id").await?;
 | `team()` | `retrieve`, `update`, `usage`, `roles` |
 | `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
-| `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)` |
+| `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)`, `retry(webhook_id, delivery_id)` |
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
+
+`webhooks().deliveries().retry(webhook_id, delivery_id)` sends a delivery's original payload to the webhook again now. The retry counts as a delivery attempt; if it fails with a retryable error, automatic retries continue.
 
 Request types that have required enum fields have a `new` constructor with the required fields, for example `StoreRouteData::new("Inbound", RouteType::Inbound)`.
 

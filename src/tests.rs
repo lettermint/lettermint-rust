@@ -190,6 +190,7 @@ async fn every_operation_is_reachable() {
     let _ = deliveries.list("w", &Default::default()).await;
     let _ = deliveries.iterate("w", &Default::default()).next().await;
     let _ = deliveries.retrieve("w", "x").await;
+    let _ = deliveries.retry("w", "x").await;
 
     let reached: BTreeSet<String> = recorder
         .0
@@ -202,7 +203,7 @@ async fn every_operation_is_reachable() {
         .iter()
         .map(|operation| operation.key.to_owned())
         .collect();
-    assert_eq!(table.len(), 59);
+    assert_eq!(table.len(), 60);
     let missing: Vec<_> = table.difference(&reached).collect();
     assert!(missing.is_empty(), "not reachable: {missing:?}");
     assert_eq!(reached, table);

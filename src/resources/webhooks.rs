@@ -3,9 +3,9 @@ use crate::error::Result;
 use crate::generated::operations as ops;
 use crate::generated::types::{
     ListWebhookDeliveriesQuery, ListWebhookDeliveriesResponse, ListWebhooksQuery,
-    ListWebhooksResponse, MessageResponse, StoreWebhookData, TestWebhookResponse,
-    UpdateWebhookData, WebhookData, WebhookDeliveryData, WebhookDeliveryListData, WebhookListData,
-    WebhookMutationResponse, WebhookSecretResponse,
+    ListWebhooksResponse, MessageResponse, RetryWebhookDeliveryResponse, StoreWebhookData,
+    TestWebhookResponse, UpdateWebhookData, WebhookData, WebhookDeliveryData,
+    WebhookDeliveryListData, WebhookListData, WebhookMutationResponse, WebhookSecretResponse,
 };
 use crate::pagination::Paginator;
 use crate::transport::CallOptions;
@@ -173,6 +173,26 @@ impl WebhookDeliveries {
         self.client
             .call::<ops::GetWebhookDelivery>(
                 "webhooks.deliveries.retrieve",
+                &[webhook_id, delivery_id],
+                &(),
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Sends the delivery's original payload to the webhook again now. The retry counts as a
+    /// delivery attempt; if it fails with a retryable error, automatic retries continue. A
+    /// disabled webhook, a delivery that cannot be retried or a retry already in progress is an
+    /// [`Error::Conflict`](crate::Error::Conflict) with the reason in its code.
+    pub async fn retry(
+        &self,
+        webhook_id: &str,
+        delivery_id: &str,
+    ) -> Result<RetryWebhookDeliveryResponse> {
+        self.client
+            .call::<ops::RetryWebhookDelivery>(
+                "webhooks.deliveries.retry",
                 &[webhook_id, delivery_id],
                 &(),
                 None,
