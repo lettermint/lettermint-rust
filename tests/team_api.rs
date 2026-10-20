@@ -3,10 +3,12 @@ mod common;
 use common::*;
 use futures_core::Stream;
 use lettermint::types::{
-    CreateTeamInviteData, CreateTeamInviteDataProjectAccess, GetDomainQueryIncludeItem,
-    GetStatsQuery, ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery,
-    ListWebhookDeliveriesQuery, MessageStatus, ProjectAccessScope, RescheduleMessageRequest,
+    BuiltInTeamRole, CreateTeamInviteData, CreateTeamInviteDataProjectAccess, CreateTeamRoleData,
+    DeleteTeamRoleQuery, DuplicateTeamRoleData, GetDomainQueryIncludeItem, GetStatsQuery,
+    ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery, ListWebhookDeliveriesQuery,
+    MessageStatus, ProjectAccessScope, RbacPermission, RescheduleMessageRequest,
     ResendMessageRequest, StoreDomainData, UpdateTeamInviteData, UpdateTeamInviteDataProjectAccess,
+    UpdateTeamRoleData,
 };
 use lettermint::{Error, SendOptions};
 use serde_json::{Value, json};
@@ -680,6 +682,236 @@ async fn invites_check_their_path_parameters_and_token() {
         .team()
         .invites()
         .list(&Default::default())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Config(_)), "{error:?}");
+    assert!(error.to_string().contains("team_token"), "{error}");
+    assert_eq!(transport.count(), 0);
+}
+
+fn role(id: &str, description: Option<Value>) -> Value {
+    let mut role = json!({"id": id, "name": "Developer", "system_key": null, "permissions": ["members:read"], "assignable": true});
+    if let Some(value) = description {
+        role["description"] = value;
+    }
+    role
+}
+
+#[tokio::test]
+async fn roles_retrieve_with_and_without_a_description() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(200, role("r1", Some(json!("Builds things")))));
+    transport.reply(Reply::json(200, role("r1", Some(Value::Null))));
+    transport.reply(Reply::json(200, role("r1", None)));
+    transport.reply(Reply::json(
+        200,
+        json!({"id": "r0", "name": "Owner", "description": null, "system_key": "owner", "permissions": [], "assignable": false}),
+    ));
+    let client = team_client(&transport);
+    let team = client.team();
+
+    let described = team.retrieve_role("r1").await.unwrap();
+    assert_eq!(described.id, "r1");
+    assert_eq!(described.description, Some(Some("Builds things".into())));
+    assert_eq!(described.system_key, None);
+    assert_eq!(described.permissions, [RbacPermission::MembersRead]);
+    assert!(described.assignable);
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::GET);
+    assert_eq!(target(&request), "/team/roles/r1");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+
+    // null: the role has no description.
+    let null = team.retrieve_role("r1").await.unwrap();
+    assert_eq!(null.description, Some(None));
+    let absent = team.retrieve_role("r1").await.unwrap();
+    assert_eq!(absent.description, None);
+    let owner = team.retrieve_role("r0").await.unwrap();
+    assert_eq!(owner.system_key, Some(BuiltInTeamRole::Owner));
+    assert!(!owner.assignable);
+}
+
+#[tokio::test]
+async fn roles_create_update_and_duplicate_send_their_bodies() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let team = client.team();
+
+    transport.reply(Reply::json(201, role("r2", Some(json!("Reads members")))));
+    let created = team
+        .create_role(&CreateTeamRoleData {
+            name: "Developer".into(),
+            description: Some(Some("Reads members".into())),
+            permissions: vec![RbacPermission::MembersRead],
+        })
+        .await
+        .unwrap();
+    assert_eq!(created.id, "r2");
+    assert_eq!(created.description, Some(Some("Reads members".into())));
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/team/roles");
+    assert_team_auth(&request);
+    assert_eq!(header(&request, "content-type"), Some("application/json"));
+    assert_eq!(
+        body_json(&request),
+        json!({"name": "Developer", "description": "Reads members", "permissions": ["members:read"]})
+    );
+
+    // Without a description the key is left out.
+    transport.reply(Reply::json(201, role("r3", Some(Value::Null))));
+    team.create_role(&CreateTeamRoleData {
+        name: "Viewer".into(),
+        permissions: vec![RbacPermission::MembersRead],
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        body_json(&transport.last()),
+        json!({"name": "Viewer", "permissions": ["members:read"]})
+    );
+
+    // Some(None) clears the description.
+    transport.reply(Reply::json(200, role("r2", Some(Value::Null))));
+    let updated = team
+        .update_role(
+            "r2",
+            &UpdateTeamRoleData {
+                name: "Developer".into(),
+                description: Some(None),
+                permissions: vec![RbacPermission::TeamManage, RbacPermission::MembersRead],
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.description, Some(None));
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::PUT);
+    assert_eq!(target(&request), "/team/roles/r2");
+    assert_team_auth(&request);
+    assert_eq!(
+        body_json(&request),
+        json!({"name": "Developer", "description": null, "permissions": ["team:manage", "members:read"]})
+    );
+
+    transport.reply(Reply::json(201, role("r4", Some(json!("Reads members")))));
+    let copy = team
+        .duplicate_role(
+            "r2",
+            &DuplicateTeamRoleData {
+                name: "Developer (copy)".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(copy.id, "r4");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/team/roles/r2/duplicate");
+    assert_team_auth(&request);
+    assert_eq!(body_json(&request), json!({"name": "Developer (copy)"}));
+}
+
+#[tokio::test]
+async fn delete_role_sends_the_replacement_role_only_when_set() {
+    let transport = MockTransport::new();
+    transport.always(Reply::json(200, json!({"message": "Team role deleted."})));
+    let client = team_client(&transport);
+
+    let deleted = client
+        .team()
+        .delete_role("r2", &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(deleted.message, "Team role deleted.");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::DELETE);
+    assert_eq!(target(&request), "/team/roles/r2");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+
+    client
+        .team()
+        .delete_role(
+            "r2",
+            &DeleteTeamRoleQuery {
+                replacement_role_id: Some("r1".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        target(&transport.last()),
+        "/team/roles/r2?replacement_role_id=r1"
+    );
+}
+
+#[tokio::test]
+async fn role_conflicts_and_validation_errors() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+
+    transport.reply(Reply::json(
+        409,
+        json!({"message": "The role is still assigned. Choose a replacement role."}),
+    ));
+    let error = client
+        .team()
+        .delete_role("r2", &Default::default())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Conflict(_)), "{error:?}");
+    assert_eq!(error.status(), Some(409));
+    assert_eq!(
+        error.api_error().unwrap().message(),
+        "The role is still assigned. Choose a replacement role."
+    );
+
+    transport.reply(Reply::json(
+        422,
+        json!({"message": "The name has already been taken.", "errors": {"name": ["The name has already been taken."]}}),
+    ));
+    let error = client
+        .team()
+        .create_role(&CreateTeamRoleData {
+            name: "Developer".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Validation(_)), "{error:?}");
+    assert_eq!(
+        error.api_error().unwrap().errors().unwrap()["name"],
+        ["The name has already been taken."]
+    );
+}
+
+#[tokio::test]
+async fn roles_check_their_path_parameters_and_token() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let team = client.team();
+    for id in ["", ".", ".."] {
+        let errors = [
+            team.retrieve_role(id).await.unwrap_err(),
+            team.update_role(id, &Default::default()).await.unwrap_err(),
+            team.delete_role(id, &Default::default()).await.unwrap_err(),
+            team.duplicate_role(id, &Default::default())
+                .await
+                .unwrap_err(),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Config(_)), "{id:?}: {error:?}");
+            assert!(error.to_string().contains("`role_id`"), "{error}");
+        }
+    }
+
+    let error = sending_client(&transport)
+        .team()
+        .create_role(&Default::default())
         .await
         .unwrap_err();
     assert!(matches!(error, Error::Config(_)), "{error:?}");
