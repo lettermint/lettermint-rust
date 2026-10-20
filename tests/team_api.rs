@@ -5,10 +5,10 @@ use futures_core::Stream;
 use lettermint::types::{
     BuiltInTeamRole, CreateTeamInviteData, CreateTeamInviteDataProjectAccess, CreateTeamRoleData,
     DeleteTeamRoleQuery, DuplicateTeamRoleData, GetDomainQueryIncludeItem, GetStatsQuery,
-    ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery, ListWebhookDeliveriesQuery,
-    MessageStatus, ProjectAccessScope, RbacPermission, RescheduleMessageRequest,
-    ResendMessageRequest, StoreDomainData, UpdateTeamInviteData, UpdateTeamInviteDataProjectAccess,
-    UpdateTeamRoleData,
+    ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery, ListTeamMembersQuery,
+    ListWebhookDeliveriesQuery, MessageStatus, ProjectAccessScope, RbacPermission,
+    RescheduleMessageRequest, ResendMessageRequest, StoreDomainData, UpdateTeamInviteData,
+    UpdateTeamInviteDataProjectAccess, UpdateTeamRoleData,
 };
 use lettermint::{Error, SendOptions};
 use serde_json::{Value, json};
@@ -917,6 +917,88 @@ async fn roles_check_their_path_parameters_and_token() {
     assert!(matches!(error, Error::Config(_)), "{error:?}");
     assert!(error.to_string().contains("team_token"), "{error}");
     assert_eq!(transport.count(), 0);
+}
+
+#[tokio::test]
+async fn members_list_filters_by_project() {
+    let member = json!({"id": "u1", "name": "Jane", "email": "jane@example.com", "role": {"id": "r1", "name": "Developer", "system_key": null}, "project_access": {"scope": "all", "projects": []}, "joined_at": "2026-10-01T00:00:00Z"});
+    let transport = MockTransport::new();
+    transport.reply(page(json!([member]), None));
+    transport.reply(page(json!([]), None));
+    let client = team_client(&transport);
+
+    let members = client
+        .team()
+        .members()
+        .list(&ListTeamMembersQuery {
+            filter_project_id: Some("p1".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(members.data[0].id, "u1");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::GET);
+    assert_eq!(target(&request), "/team/members?filter%5Bproject_id%5D=p1");
+    assert_team_auth(&request);
+
+    // The iterator keeps the filter on every page; an unknown project is an empty list.
+    let mut iterate = client.team().members().iterate(&ListTeamMembersQuery {
+        page_size: Some(10),
+        filter_project_id: Some("unknown".into()),
+        ..Default::default()
+    });
+    assert!(iterate.next().await.is_none());
+    assert_eq!(
+        target(&transport.last()),
+        "/team/members?page%5Bsize%5D=10&filter%5Bproject_id%5D=unknown"
+    );
+}
+
+#[tokio::test]
+async fn members_remove_deletes_the_member() {
+    let transport = MockTransport::new();
+    transport.reply(Reply::json(200, json!({"message": "Team member removed."})));
+    let client = team_client(&transport);
+    let removed = client.team().members().remove("u1").await.unwrap();
+    assert_eq!(removed.message, "Team member removed.");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::DELETE);
+    assert_eq!(target(&request), "/team/members/u1");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+    assert_eq!(header(&request, "content-type"), None);
+
+    transport.reply(Reply::json(
+        409,
+        json!({"message": "The team owner cannot be removed."}),
+    ));
+    let error = client.team().members().remove("u0").await.unwrap_err();
+    assert!(matches!(error, Error::Conflict(_)), "{error:?}");
+    assert_eq!(error.status(), Some(409));
+    assert_eq!(
+        error.api_error().unwrap().message(),
+        "The team owner cannot be removed."
+    );
+
+    transport.reply(Reply::json(404, json!({"message": "Not found."})));
+    let error = client.team().members().remove("u9").await.unwrap_err();
+    assert!(matches!(error, Error::NotFound(_)), "{error:?}");
+
+    let before = transport.count();
+    for id in ["", ".", ".."] {
+        let error = client.team().members().remove(id).await.unwrap_err();
+        assert!(matches!(error, Error::Config(_)), "{id:?}: {error:?}");
+        assert!(error.to_string().contains("`user_id`"), "{error}");
+    }
+    let error = sending_client(&transport)
+        .team()
+        .members()
+        .remove("u1")
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("team_token"), "{error}");
+    assert_eq!(transport.count(), before);
 }
 
 #[tokio::test]

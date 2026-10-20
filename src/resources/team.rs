@@ -241,7 +241,9 @@ impl Team {
 }
 
 impl TeamMembers {
-    /// Lists team members, one page at a time.
+    /// Lists team members, one page at a time. `query.filter_project_id` returns only the
+    /// members who can access that project: members with access to all projects and members
+    /// selected for it.
     pub async fn list(&self, query: &ListTeamMembersQuery) -> Result<ListTeamMembersResponse> {
         self.client
             .call::<ops::ListTeamMembers>(
@@ -285,6 +287,19 @@ impl TeamMembers {
                 &[user_id],
                 &(),
                 Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Removes a member from the team. The Owner cannot be removed.
+    pub async fn remove(&self, user_id: &str) -> Result<MessageResponse> {
+        self.client
+            .call::<ops::DeleteTeamMember>(
+                "team.members.remove",
+                &[user_id],
+                &(),
+                None,
                 CallOptions::default(),
             )
             .await
