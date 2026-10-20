@@ -3,9 +3,10 @@ mod common;
 use common::*;
 use futures_core::Stream;
 use lettermint::types::{
-    GetDomainQueryIncludeItem, GetStatsQuery, ListDomainsQuery, ListDomainsQuerySortItem,
-    ListWebhookDeliveriesQuery, MessageStatus, RescheduleMessageRequest, ResendMessageRequest,
-    StoreDomainData,
+    CreateTeamInviteData, CreateTeamInviteDataProjectAccess, GetDomainQueryIncludeItem,
+    GetStatsQuery, ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery,
+    ListWebhookDeliveriesQuery, MessageStatus, ProjectAccessScope, RescheduleMessageRequest,
+    ResendMessageRequest, StoreDomainData, UpdateTeamInviteData, UpdateTeamInviteDataProjectAccess,
 };
 use lettermint::{Error, SendOptions};
 use serde_json::{Value, json};
@@ -480,6 +481,210 @@ async fn retry_delivery_rate_limits_accept_a_plain_message() {
         error.api_error().unwrap().retry_after(),
         Some(std::time::Duration::from_secs(30))
     );
+}
+
+fn invite(id: &str) -> Value {
+    json!({"id": id, "email": format!("{id}@example.com"), "role": {"id": "r1", "name": "Developer"}, "project_access": {"scope": "selected", "projects": [{"id": "p1", "name": "Production"}]}, "created_at": "2026-10-01T00:00:00Z"})
+}
+
+fn assert_team_auth(request: &lettermint::HttpRequest) {
+    assert_eq!(
+        header(request, "authorization"),
+        Some(format!("Bearer {TEAM_TOKEN}").as_str())
+    );
+    assert_eq!(header(request, "x-lettermint-token"), None);
+    assert_eq!(header(request, "idempotency-key"), None);
+}
+
+#[tokio::test]
+async fn invites_list_retrieve_and_iterate() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+
+    transport.reply(page(json!([invite("i1")]), Some("c2")));
+    let page_one = client
+        .team()
+        .invites()
+        .list(&ListTeamInvitesQuery {
+            page_size: Some(1),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(page_one.data[0].email, "i1@example.com");
+    assert_eq!(page_one.data[0].role.name, "Developer");
+    assert_eq!(
+        page_one.data[0].project_access.scope,
+        ProjectAccessScope::Selected
+    );
+    assert_eq!(page_one.data[0].project_access.projects[0].id, "p1");
+    assert_eq!(page_one.next_cursor.as_deref(), Some("c2"));
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::GET);
+    assert_eq!(target(&request), "/team/invites?page%5Bsize%5D=1");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+
+    transport.reply(Reply::json(200, invite("i1")));
+    let retrieved = client.team().invites().retrieve("i1").await.unwrap();
+    assert_eq!(retrieved.id, "i1");
+    assert_eq!(retrieved.created_at, "2026-10-01T00:00:00Z");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::GET);
+    assert_eq!(target(&request), "/team/invites/i1");
+    assert_team_auth(&request);
+
+    transport.reply(page(json!([invite("i1"), invite("i2")]), Some("c2")));
+    transport.reply(page(json!([invite("i3")]), None));
+    let mut invites = client.team().invites().iterate(&ListTeamInvitesQuery {
+        page_size: Some(2),
+        ..Default::default()
+    });
+    let mut ids = Vec::new();
+    while let Some(invite) = invites.next().await {
+        ids.push(invite.unwrap().id);
+    }
+    assert_eq!(ids, ["i1", "i2", "i3"]);
+    assert_eq!(
+        target(&transport.last()),
+        "/team/invites?page%5Bsize%5D=2&page%5Bcursor%5D=c2"
+    );
+}
+
+#[tokio::test]
+async fn invites_create_update_and_revoke() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+
+    transport.reply(Reply::json(201, invite("i1")));
+    let created = client
+        .team()
+        .invites()
+        .create(&CreateTeamInviteData::new(
+            "i1@example.com",
+            "r1",
+            CreateTeamInviteDataProjectAccess {
+                scope: ProjectAccessScope::Selected,
+                project_ids: Some(vec!["p1".into()]),
+            },
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.id, "i1");
+    assert_eq!(created.role.id, "r1");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/team/invites");
+    assert_team_auth(&request);
+    assert_eq!(header(&request, "content-type"), Some("application/json"));
+    assert_eq!(
+        body_json(&request),
+        json!({"email": "i1@example.com", "role_id": "r1", "project_access": {"scope": "selected", "project_ids": ["p1"]}})
+    );
+
+    transport.reply(Reply::json(200, invite("i1")));
+    let updated = client
+        .team()
+        .invites()
+        .update(
+            "i1",
+            &UpdateTeamInviteData::new(
+                "new@example.com",
+                "r2",
+                UpdateTeamInviteDataProjectAccess::new(ProjectAccessScope::All),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.id, "i1");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::PUT);
+    assert_eq!(target(&request), "/team/invites/i1");
+    assert_team_auth(&request);
+    // Without project ids, only the scope is sent.
+    assert_eq!(
+        body_json(&request),
+        json!({"email": "new@example.com", "role_id": "r2", "project_access": {"scope": "all"}})
+    );
+
+    transport.reply(Reply::json(200, json!({"message": "Team invite revoked."})));
+    let revoked = client.team().invites().revoke("i1").await.unwrap();
+    assert_eq!(revoked.message, "Team invite revoked.");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::DELETE);
+    assert_eq!(target(&request), "/team/invites/i1");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+}
+
+#[tokio::test]
+async fn invite_errors_map_to_the_error_variants() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let body = || {
+        CreateTeamInviteData::new(
+            "i1@example.com",
+            "r1",
+            CreateTeamInviteDataProjectAccess::new(ProjectAccessScope::All),
+        )
+    };
+
+    transport.reply(Reply::json(
+        409,
+        json!({"message": "The team has no free seat."}),
+    ));
+    let error = client.team().invites().create(&body()).await.unwrap_err();
+    assert!(matches!(error, Error::Conflict(_)), "{error:?}");
+    assert_eq!(error.status(), Some(409));
+    assert_eq!(
+        error.api_error().unwrap().message(),
+        "The team has no free seat."
+    );
+
+    transport.reply(Reply::json(
+        422,
+        json!({"message": "The email field must be a valid email address.", "errors": {"email": ["The email field must be a valid email address."]}}),
+    ));
+    let error = client.team().invites().create(&body()).await.unwrap_err();
+    assert!(matches!(error, Error::Validation(_)), "{error:?}");
+    let errors = error.api_error().unwrap().errors().unwrap();
+    assert_eq!(
+        errors["email"],
+        ["The email field must be a valid email address."]
+    );
+}
+
+#[tokio::test]
+async fn invites_check_their_path_parameters_and_token() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let invites = client.team().invites();
+    let body = UpdateTeamInviteData::new(
+        "i1@example.com",
+        "r1",
+        UpdateTeamInviteDataProjectAccess::new(ProjectAccessScope::All),
+    );
+    for id in ["", ".", ".."] {
+        let errors = [
+            invites.retrieve(id).await.unwrap_err(),
+            invites.update(id, &body).await.unwrap_err(),
+            invites.revoke(id).await.unwrap_err(),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Config(_)), "{id:?}: {error:?}");
+            assert!(error.to_string().contains("`invite_id`"), "{error}");
+        }
+    }
+
+    let error = sending_client(&transport)
+        .team()
+        .invites()
+        .list(&Default::default())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Config(_)), "{error:?}");
+    assert!(error.to_string().contains("team_token"), "{error}");
+    assert_eq!(transport.count(), 0);
 }
 
 #[tokio::test]

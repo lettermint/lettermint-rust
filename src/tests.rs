@@ -176,6 +176,26 @@ async fn every_operation_is_reachable() {
     let _ = members
         .update_assignment("u", &UpdateTeamMemberAssignmentData::new("member", access))
         .await;
+    let invites = team.invites();
+    let _ = invites.list(&Default::default()).await;
+    let _ = invites.iterate(&Default::default()).next().await;
+    let _ = invites.retrieve("i").await;
+    let create_access = CreateTeamInviteDataProjectAccess::new(ProjectAccessScope::All);
+    let _ = invites
+        .create(&CreateTeamInviteData::new(
+            "a@example.com",
+            "member",
+            create_access,
+        ))
+        .await;
+    let update_access = UpdateTeamInviteDataProjectAccess::new(ProjectAccessScope::All);
+    let _ = invites
+        .update(
+            "i",
+            &UpdateTeamInviteData::new("a@example.com", "member", update_access),
+        )
+        .await;
+    let _ = invites.revoke("i").await;
 
     let webhooks = client.webhooks();
     let _ = webhooks.list(&Default::default()).await;
@@ -192,6 +212,17 @@ async fn every_operation_is_reachable() {
     let _ = deliveries.retrieve("w", "x").await;
     let _ = deliveries.retry("w", "x").await;
 
+    // Added by the next PRs in this stack (team role management, then member removal). Remove
+    // each entry when its method lands; an entry that is reached fails the test.
+    const PENDING: &[&str] = &[
+        "GET /team/roles/{roleId}",
+        "POST /team/roles",
+        "PUT /team/roles/{roleId}",
+        "DELETE /team/roles/{roleId}",
+        "POST /team/roles/{roleId}/duplicate",
+        "DELETE /team/members/{userId}",
+    ];
+
     let reached: BTreeSet<String> = recorder
         .0
         .lock()
@@ -203,10 +234,18 @@ async fn every_operation_is_reachable() {
         .iter()
         .map(|operation| operation.key.to_owned())
         .collect();
-    assert_eq!(table.len(), 60);
-    let missing: Vec<_> = table.difference(&reached).collect();
+    assert_eq!(table.len(), 71);
+    let pending: BTreeSet<String> = PENDING.iter().map(|key| (*key).to_owned()).collect();
+    assert!(pending.is_subset(&table), "unknown pending: {pending:?}");
+    let reached_pending: Vec<_> = pending.intersection(&reached).collect();
+    assert!(
+        reached_pending.is_empty(),
+        "reachable, remove from PENDING: {reached_pending:?}"
+    );
+    let expected: BTreeSet<String> = table.difference(&pending).cloned().collect();
+    let missing: Vec<_> = expected.difference(&reached).collect();
     assert!(missing.is_empty(), "not reachable: {missing:?}");
-    assert_eq!(reached, table);
+    assert_eq!(reached, expected);
 }
 
 #[test]

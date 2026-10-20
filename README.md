@@ -332,9 +332,12 @@ let html = lettermint.messages().html("message-id").await?;
 | `suppressions()` | `list`, `iterate`, `create`, `delete` |
 | `team()` | `retrieve`, `update`, `usage`, `roles` |
 | `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment` |
+| `team().invites()` | `list`, `iterate`, `retrieve`, `create`, `update`, `revoke` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
 | `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)`, `retry(webhook_id, delivery_id)` |
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
+
+`team().invites().create(..)` invites a person with a role and project access and emails the invitation; the team needs a free seat. `update(invite_id, ..)` replaces the address, role and project access and sends a new email only when the address changes. `revoke(invite_id)` withdraws a pending invitation.
 
 `webhooks().deliveries().retry(webhook_id, delivery_id)` sends a delivery's original payload to the webhook again now. The retry counts as a delivery attempt; if it fails with a retryable error, automatic retries continue.
 
