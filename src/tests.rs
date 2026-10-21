@@ -168,6 +168,11 @@ async fn every_operation_is_reachable() {
     let _ = team.update(&Default::default()).await;
     let _ = team.usage().await;
     let _ = team.roles().await;
+    let _ = team.retrieve_role("r").await;
+    let _ = team.create_role(&Default::default()).await;
+    let _ = team.update_role("r", &Default::default()).await;
+    let _ = team.delete_role("r", &Default::default()).await;
+    let _ = team.duplicate_role("r", &Default::default()).await;
     let members = team.members();
     let _ = members.list(&Default::default()).await;
     let _ = members.iterate(&Default::default()).next().await;
@@ -212,16 +217,9 @@ async fn every_operation_is_reachable() {
     let _ = deliveries.retrieve("w", "x").await;
     let _ = deliveries.retry("w", "x").await;
 
-    // Added by the next PRs in this stack (team role management, then member removal). Remove
-    // each entry when its method lands; an entry that is reached fails the test.
-    const PENDING: &[&str] = &[
-        "GET /team/roles/{roleId}",
-        "POST /team/roles",
-        "PUT /team/roles/{roleId}",
-        "DELETE /team/roles/{roleId}",
-        "POST /team/roles/{roleId}/duplicate",
-        "DELETE /team/members/{userId}",
-    ];
+    // Added by the next PR in this stack (member removal). Remove each entry when its method
+    // lands; an entry that is reached fails the test.
+    const PENDING: &[&str] = &["DELETE /team/members/{userId}"];
 
     let reached: BTreeSet<String> = recorder
         .0

@@ -330,7 +330,7 @@ let html = lettermint.messages().html("message-id").await?;
 | `routes()` | `list(project_id, ..)`, `iterate(project_id, ..)`, `create(project_id, ..)`, `retrieve`, `update`, `delete`, `verify_inbound_domain` |
 | `stats()` | `retrieve` |
 | `suppressions()` | `list`, `iterate`, `create`, `delete` |
-| `team()` | `retrieve`, `update`, `usage`, `roles` |
+| `team()` | `retrieve`, `update`, `usage`, `roles`, `retrieve_role`, `create_role`, `update_role`, `delete_role`, `duplicate_role` |
 | `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment` |
 | `team().invites()` | `list`, `iterate`, `retrieve`, `create`, `update`, `revoke` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
@@ -338,6 +338,27 @@ let html = lettermint.messages().html("message-id").await?;
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
 
 `team().invites().create(..)` invites a person with a role and project access and emails the invitation; the team needs a free seat. `update(invite_id, ..)` replaces the address, role and project access and sends a new email only when the address changes. `revoke(invite_id)` withdraws a pending invitation.
+
+`team().create_role(..)` creates a custom role (the plan must include custom roles), `update_role(role_id, ..)` replaces its name, description and permissions, and `duplicate_role(role_id, ..)` copies a role under a new name. Built-in roles cannot be changed or deleted. While a role is still assigned, `delete_role` needs a replacement role that receives the assignments:
+
+```rust,no_run
+# use lettermint::Lettermint;
+use lettermint::types::{CreateTeamRoleData, DeleteTeamRoleQuery, RbacPermission};
+
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let role = lettermint
+    .team()
+    .create_role(&CreateTeamRoleData {
+        name: "Support".into(),
+        description: Some(Some("Reads messages".into())),
+        permissions: vec![RbacPermission::MessagesRead],
+    })
+    .await?;
+let query = DeleteTeamRoleQuery { replacement_role_id: Some("replacement-role-id".into()) };
+lettermint.team().delete_role(&role.id, &query).await?;
+# Ok(())
+# }
+```
 
 `webhooks().deliveries().retry(webhook_id, delivery_id)` sends a delivery's original payload to the webhook again now. The retry counts as a delivery attempt; if it fails with a retryable error, automatic retries continue.
 

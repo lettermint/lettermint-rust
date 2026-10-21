@@ -2,12 +2,13 @@ use crate::client::Lettermint;
 use crate::error::Result;
 use crate::generated::operations as ops;
 use crate::generated::types::{
-    CreateTeamInviteData, DeleteSuppressionResponse, GetStatsQuery, GetTeamQuery,
-    ListSuppressionsQuery, ListSuppressionsResponse, ListTeamInvitesQuery, ListTeamInvitesResponse,
-    ListTeamMembersQuery, ListTeamMembersResponse, MessageResponse, StatsData,
-    StoreSuppressionData, SuppressedRecipientData, SuppressionStoreResponse, TeamData,
-    TeamInviteData, TeamMemberData, TeamMutationResponse, TeamRoleListResponse,
-    TeamUsageDetailData, UpdateTeamData, UpdateTeamInviteData, UpdateTeamMemberAssignmentData,
+    CreateTeamInviteData, CreateTeamRoleData, DeleteSuppressionResponse, DeleteTeamRoleQuery,
+    DuplicateTeamRoleData, GetStatsQuery, GetTeamQuery, ListSuppressionsQuery,
+    ListSuppressionsResponse, ListTeamInvitesQuery, ListTeamInvitesResponse, ListTeamMembersQuery,
+    ListTeamMembersResponse, MessageResponse, StatsData, StoreSuppressionData,
+    SuppressedRecipientData, SuppressionStoreResponse, TeamData, TeamInviteData, TeamMemberData,
+    TeamMutationResponse, TeamRoleData, TeamRoleListResponse, TeamUsageDetailData, UpdateTeamData,
+    UpdateTeamInviteData, UpdateTeamMemberAssignmentData, UpdateTeamRoleData,
 };
 use crate::pagination::Paginator;
 use crate::transport::CallOptions;
@@ -152,6 +153,89 @@ impl Team {
     pub async fn roles(&self) -> Result<TeamRoleListResponse> {
         self.client
             .call::<ops::ListTeamRoles>("team.roles", &[], &(), None, CallOptions::default())
+            .await
+    }
+
+    /// A team role.
+    pub async fn retrieve_role(&self, role_id: &str) -> Result<TeamRoleData> {
+        self.client
+            .call::<ops::GetTeamRole>(
+                "team.retrieve_role",
+                &[role_id],
+                &(),
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Creates a custom role. The plan must include custom roles, the permissions must include
+    /// the permissions they depend on, and role names are unique within the team.
+    pub async fn create_role(&self, body: &CreateTeamRoleData) -> Result<TeamRoleData> {
+        self.client
+            .call::<ops::CreateTeamRole>(
+                "team.create_role",
+                &[],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Replaces the name, description and complete permission set of a custom role. The change
+    /// applies to every member, invitation and SCIM group that holds the role. Built-in roles
+    /// cannot be changed.
+    pub async fn update_role(
+        &self,
+        role_id: &str,
+        body: &UpdateTeamRoleData,
+    ) -> Result<TeamRoleData> {
+        self.client
+            .call::<ops::UpdateTeamRole>(
+                "team.update_role",
+                &[role_id],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Deletes a custom role. While the role is still assigned to members, invitations or SCIM
+    /// groups, `query.replacement_role_id` names the role that receives those assignments.
+    /// Built-in roles cannot be deleted.
+    pub async fn delete_role(
+        &self,
+        role_id: &str,
+        query: &DeleteTeamRoleQuery,
+    ) -> Result<MessageResponse> {
+        self.client
+            .call::<ops::DeleteTeamRole>(
+                "team.delete_role",
+                &[role_id],
+                query,
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Copies a role under a new name. Without a description, the copy keeps the description of
+    /// the source role. The Owner role cannot be duplicated.
+    pub async fn duplicate_role(
+        &self,
+        role_id: &str,
+        body: &DuplicateTeamRoleData,
+    ) -> Result<TeamRoleData> {
+        self.client
+            .call::<ops::DuplicateTeamRole>(
+                "team.duplicate_role",
+                &[role_id],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
             .await
     }
 }
