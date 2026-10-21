@@ -331,11 +331,13 @@ let html = lettermint.messages().html("message-id").await?;
 | `stats()` | `retrieve` |
 | `suppressions()` | `list`, `iterate`, `create`, `delete` |
 | `team()` | `retrieve`, `update`, `usage`, `roles`, `retrieve_role`, `create_role`, `update_role`, `delete_role`, `duplicate_role` |
-| `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment` |
+| `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment`, `remove` |
 | `team().invites()` | `list`, `iterate`, `retrieve`, `create`, `update`, `revoke` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
 | `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)`, `retry(webhook_id, delivery_id)` |
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
+
+`team().members().remove(user_id)` removes a member other than the Owner. `ListTeamMembersQuery { filter_project_id: Some(project_id), .. }` lists only the members who can access that project: members with access to all projects and members selected for it.
 
 `team().invites().create(..)` invites a person with a role and project access and emails the invitation; the team needs a free seat. `update(invite_id, ..)` replaces the address, role and project access and sends a new email only when the address changes. `revoke(invite_id)` withdraws a pending invitation.
 

@@ -181,6 +181,7 @@ async fn every_operation_is_reachable() {
     let _ = members
         .update_assignment("u", &UpdateTeamMemberAssignmentData::new("member", access))
         .await;
+    let _ = members.remove("u").await;
     let invites = team.invites();
     let _ = invites.list(&Default::default()).await;
     let _ = invites.iterate(&Default::default()).next().await;
@@ -217,10 +218,6 @@ async fn every_operation_is_reachable() {
     let _ = deliveries.retrieve("w", "x").await;
     let _ = deliveries.retry("w", "x").await;
 
-    // Added by the next PR in this stack (member removal). Remove each entry when its method
-    // lands; an entry that is reached fails the test.
-    const PENDING: &[&str] = &["DELETE /team/members/{userId}"];
-
     let reached: BTreeSet<String> = recorder
         .0
         .lock()
@@ -233,17 +230,9 @@ async fn every_operation_is_reachable() {
         .map(|operation| operation.key.to_owned())
         .collect();
     assert_eq!(table.len(), 71);
-    let pending: BTreeSet<String> = PENDING.iter().map(|key| (*key).to_owned()).collect();
-    assert!(pending.is_subset(&table), "unknown pending: {pending:?}");
-    let reached_pending: Vec<_> = pending.intersection(&reached).collect();
-    assert!(
-        reached_pending.is_empty(),
-        "reachable, remove from PENDING: {reached_pending:?}"
-    );
-    let expected: BTreeSet<String> = table.difference(&pending).cloned().collect();
-    let missing: Vec<_> = expected.difference(&reached).collect();
+    let missing: Vec<_> = table.difference(&reached).collect();
     assert!(missing.is_empty(), "not reachable: {missing:?}");
-    assert_eq!(reached, expected);
+    assert_eq!(reached, table);
 }
 
 #[test]
