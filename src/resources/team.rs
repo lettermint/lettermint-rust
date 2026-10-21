@@ -2,11 +2,12 @@ use crate::client::Lettermint;
 use crate::error::Result;
 use crate::generated::operations as ops;
 use crate::generated::types::{
-    DeleteSuppressionResponse, GetStatsQuery, GetTeamQuery, ListSuppressionsQuery,
-    ListSuppressionsResponse, ListTeamMembersQuery, ListTeamMembersResponse, StatsData,
+    CreateTeamInviteData, DeleteSuppressionResponse, GetStatsQuery, GetTeamQuery,
+    ListSuppressionsQuery, ListSuppressionsResponse, ListTeamInvitesQuery, ListTeamInvitesResponse,
+    ListTeamMembersQuery, ListTeamMembersResponse, MessageResponse, StatsData,
     StoreSuppressionData, SuppressedRecipientData, SuppressionStoreResponse, TeamData,
-    TeamMemberData, TeamMutationResponse, TeamRoleListResponse, TeamUsageDetailData,
-    UpdateTeamData, UpdateTeamMemberAssignmentData,
+    TeamInviteData, TeamMemberData, TeamMutationResponse, TeamRoleListResponse,
+    TeamUsageDetailData, UpdateTeamData, UpdateTeamInviteData, UpdateTeamMemberAssignmentData,
 };
 use crate::pagination::Paginator;
 use crate::transport::CallOptions;
@@ -35,7 +36,13 @@ pub struct TeamMembers {
     client: Lettermint,
 }
 
-super::opaque_debug!(Stats, Suppressions, Team, TeamMembers);
+/// Pending invitations to the team. Team token. Returned by [`Team::invites`].
+#[derive(Clone)]
+pub struct TeamInvites {
+    client: Lettermint,
+}
+
+super::opaque_debug!(Stats, Suppressions, Team, TeamMembers, TeamInvites);
 
 impl Stats {
     pub(crate) fn new(client: Lettermint) -> Self {
@@ -109,6 +116,13 @@ impl Team {
     /// Team members.
     pub fn members(&self) -> TeamMembers {
         TeamMembers {
+            client: self.client.clone(),
+        }
+    }
+
+    /// Pending invitations to the team.
+    pub fn invites(&self) -> TeamInvites {
+        TeamInvites {
             client: self.client.clone(),
         }
     }
@@ -187,6 +201,85 @@ impl TeamMembers {
                 &[user_id],
                 &(),
                 Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+}
+
+impl TeamInvites {
+    /// Lists pending invitations, one page at a time.
+    pub async fn list(&self, query: &ListTeamInvitesQuery) -> Result<ListTeamInvitesResponse> {
+        self.client
+            .call::<ops::ListTeamInvites>(
+                "team.invites.list",
+                &[],
+                query,
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Iterates over every pending invitation, following `next_cursor`.
+    pub fn iterate(&self, query: &ListTeamInvitesQuery) -> Paginator<TeamInviteData> {
+        self.client
+            .paginate::<ops::ListTeamInvites>("team.invites.iterate", &[], query)
+    }
+
+    /// A pending invitation.
+    pub async fn retrieve(&self, invite_id: &str) -> Result<TeamInviteData> {
+        self.client
+            .call::<ops::GetTeamInvite>(
+                "team.invites.retrieve",
+                &[invite_id],
+                &(),
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Invites a person to the team with a role and project access, and emails the invitation.
+    /// The team needs a free seat, and the Owner role cannot be assigned.
+    pub async fn create(&self, body: &CreateTeamInviteData) -> Result<TeamInviteData> {
+        self.client
+            .call::<ops::CreateTeamInvite>(
+                "team.invites.create",
+                &[],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Replaces the email address, role and project access of a pending invitation. A new
+    /// invitation email is sent only when the address changes.
+    pub async fn update(
+        &self,
+        invite_id: &str,
+        body: &UpdateTeamInviteData,
+    ) -> Result<TeamInviteData> {
+        self.client
+            .call::<ops::UpdateTeamInvite>(
+                "team.invites.update",
+                &[invite_id],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Revokes a pending invitation.
+    pub async fn revoke(&self, invite_id: &str) -> Result<MessageResponse> {
+        self.client
+            .call::<ops::DeleteTeamInvite>(
+                "team.invites.revoke",
+                &[invite_id],
+                &(),
+                None,
                 CallOptions::default(),
             )
             .await
