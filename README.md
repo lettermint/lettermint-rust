@@ -606,3 +606,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps --locked
 ## License
 
 Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), at your option.
+
+## Credits
+
+[Franz Geffke](https://github.com/franzos) wrote the first version of this SDK, the `lettermint` crate up to 0.3. Lettermint took over maintenance from 1.0 on.
