@@ -4,11 +4,13 @@ use crate::generated::operations as ops;
 use crate::generated::types::{
     CreateTeamInviteData, CreateTeamRoleData, DeleteSuppressionResponse, DeleteTeamRoleQuery,
     DuplicateTeamRoleData, GetStatsQuery, GetTeamQuery, ListSuppressionsQuery,
-    ListSuppressionsResponse, ListTeamInvitesQuery, ListTeamInvitesResponse, ListTeamMembersQuery,
-    ListTeamMembersResponse, MessageResponse, StatsData, StoreSuppressionData,
-    SuppressedRecipientData, SuppressionStoreResponse, TeamData, TeamInviteData, TeamMemberData,
-    TeamMutationResponse, TeamRoleData, TeamRoleListResponse, TeamUsageDetailData, UpdateTeamData,
-    UpdateTeamInviteData, UpdateTeamMemberAssignmentData, UpdateTeamRoleData,
+    ListSuppressionsResponse, ListTeamApiTokensQuery, ListTeamApiTokensResponse,
+    ListTeamInvitesQuery, ListTeamInvitesResponse, ListTeamMembersQuery, ListTeamMembersResponse,
+    MessageResponse, StatsData, StoreSuppressionData, StoreTeamApiTokenData,
+    SuppressedRecipientData, SuppressionStoreResponse, TeamApiToken, TeamApiTokenCreatedResponse,
+    TeamData, TeamInviteData, TeamMemberData, TeamMutationResponse, TeamRoleData,
+    TeamRoleListResponse, TeamUsageDetailData, UpdateTeamData, UpdateTeamInviteData,
+    UpdateTeamMemberAssignmentData, UpdateTeamRoleData,
 };
 use crate::pagination::Paginator;
 use crate::transport::CallOptions;
@@ -43,7 +45,20 @@ pub struct TeamInvites {
     client: Lettermint,
 }
 
-super::opaque_debug!(Stats, Suppressions, Team, TeamMembers, TeamInvites);
+/// The Team API tokens of the team. Team token. Returned by [`Team::api_tokens`].
+#[derive(Clone)]
+pub struct TeamApiTokens {
+    client: Lettermint,
+}
+
+super::opaque_debug!(
+    Stats,
+    Suppressions,
+    Team,
+    TeamMembers,
+    TeamInvites,
+    TeamApiTokens
+);
 
 impl Stats {
     pub(crate) fn new(client: Lettermint) -> Self {
@@ -124,6 +139,13 @@ impl Team {
     /// Pending invitations to the team.
     pub fn invites(&self) -> TeamInvites {
         TeamInvites {
+            client: self.client.clone(),
+        }
+    }
+
+    /// The Team API tokens of the team.
+    pub fn api_tokens(&self) -> TeamApiTokens {
+        TeamApiTokens {
             client: self.client.clone(),
         }
     }
@@ -377,6 +399,60 @@ impl TeamInvites {
             .call::<ops::DeleteTeamInvite>(
                 "team.invites.revoke",
                 &[invite_id],
+                &(),
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+}
+
+impl TeamApiTokens {
+    /// Lists the team's API tokens without their values, one page at a time.
+    pub async fn list(&self, query: &ListTeamApiTokensQuery) -> Result<ListTeamApiTokensResponse> {
+        self.client
+            .call::<ops::ListTeamApiTokens>(
+                "team.api_tokens.list",
+                &[],
+                query,
+                None,
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Iterates over every API token of the team, following `next_cursor`.
+    pub fn iterate(&self, query: &ListTeamApiTokensQuery) -> Paginator<TeamApiToken> {
+        self.client
+            .paginate::<ops::ListTeamApiTokens>("team.api_tokens.iterate", &[], query)
+    }
+
+    /// Creates a Team API token. The response holds its value once (`data.token`). The new
+    /// token can only have abilities that the requesting token has. It copies the requesting
+    /// token's IP allowlist, and it can't outlive the requesting token: `expires_at` defaults
+    /// to, and can't be later than, the requesting token's expiry. The response's `Debug`
+    /// output includes the value, so do not log it.
+    pub async fn create(
+        &self,
+        body: &StoreTeamApiTokenData,
+    ) -> Result<TeamApiTokenCreatedResponse> {
+        self.client
+            .call::<ops::CreateTeamApiToken>(
+                "team.api_tokens.create",
+                &[],
+                &(),
+                Some(body),
+                CallOptions::default(),
+            )
+            .await
+    }
+
+    /// Deletes a Team API token.
+    pub async fn delete(&self, token_id: &str) -> Result<MessageResponse> {
+        self.client
+            .call::<ops::DeleteTeamApiToken>(
+                "team.api_tokens.delete",
+                &[token_id],
                 &(),
                 None,
                 CallOptions::default(),
