@@ -132,6 +132,11 @@ async fn every_operation_is_reachable() {
     let _ = projects.delete("p").await;
     #[allow(deprecated)]
     let _ = projects.rotate_token("p").await;
+    let api_tokens = projects.api_tokens();
+    let _ = api_tokens.list("p", &Default::default()).await;
+    let _ = api_tokens.iterate("p", &Default::default()).next().await;
+    let _ = api_tokens.create("p", &Default::default()).await;
+    let _ = api_tokens.delete("p", "t").await;
     let forwarding = projects.report_forwarding();
     let _ = forwarding.retrieve("p").await;
     let _ = forwarding.update("p", &Default::default()).await;
@@ -218,6 +223,14 @@ async fn every_operation_is_reachable() {
     let _ = deliveries.retrieve("w", "x").await;
     let _ = deliveries.retry("w", "x").await;
 
+    // Added by the next PR in this stack (Team API tokens). Remove each entry when its method
+    // lands; an entry that is reached fails the test.
+    const PENDING: &[&str] = &[
+        "GET /team/api-tokens",
+        "POST /team/api-tokens",
+        "DELETE /team/api-tokens/{tokenId}",
+    ];
+
     let reached: BTreeSet<String> = recorder
         .0
         .lock()
@@ -229,10 +242,18 @@ async fn every_operation_is_reachable() {
         .iter()
         .map(|operation| operation.key.to_owned())
         .collect();
-    assert_eq!(table.len(), 71);
-    let missing: Vec<_> = table.difference(&reached).collect();
+    assert_eq!(table.len(), 77);
+    let pending: BTreeSet<String> = PENDING.iter().map(|key| (*key).to_owned()).collect();
+    assert!(pending.is_subset(&table), "unknown pending: {pending:?}");
+    let reached_pending: Vec<_> = pending.intersection(&reached).collect();
+    assert!(
+        reached_pending.is_empty(),
+        "reachable, remove from PENDING: {reached_pending:?}"
+    );
+    let expected: BTreeSet<String> = table.difference(&pending).cloned().collect();
+    let missing: Vec<_> = expected.difference(&reached).collect();
     assert!(missing.is_empty(), "not reachable: {missing:?}");
-    assert_eq!(reached, table);
+    assert_eq!(reached, expected);
 }
 
 #[test]
