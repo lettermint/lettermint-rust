@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.3.0 - 2026-10-30
+
+### What's Changed
+
+* chore(deps): bump ctutils to 0.4.6 by @bjarn in https://github.com/lettermint/lettermint-rust/pull/25
+* feat: add the inbound.rejected webhook event by @bjarn in https://github.com/lettermint/lettermint-rust/pull/24
+* docs: credit Franz Geffke for the original Rust SDK by @bjarn in https://github.com/lettermint/lettermint-rust/pull/26
+* feat: manage project API tokens by @bjarn in https://github.com/lettermint/lettermint-rust/pull/27
+* feat: manage team API tokens by @bjarn in https://github.com/lettermint/lettermint-rust/pull/28
+
+**Full Changelog**: https://github.com/lettermint/lettermint-rust/compare/v2.2.0...v2.3.0
+
 ## v2.1.0 - 2026-10-11
 
 ### What's Changed
