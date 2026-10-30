@@ -14,7 +14,7 @@ pub use domains::Domains;
 pub use messages::Messages;
 pub use projects::{ProjectApiTokens, Projects, ReportForwarding};
 pub use routes::Routes;
-pub use team::{Stats, Suppressions, Team, TeamInvites, TeamMembers};
+pub use team::{Stats, Suppressions, Team, TeamApiTokens, TeamInvites, TeamMembers};
 pub use webhooks::{WebhookDeliveries, Webhooks};
 
 /// Implements `Debug` without fields, so that a sub-client never shows the client's tokens.

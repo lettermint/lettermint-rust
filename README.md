@@ -334,6 +334,7 @@ let html = lettermint.messages().html("message-id").await?;
 | `team()` | `retrieve`, `update`, `usage`, `roles`, `retrieve_role`, `create_role`, `update_role`, `delete_role`, `duplicate_role` |
 | `team().members()` | `list`, `iterate`, `retrieve`, `update_assignment`, `remove` |
 | `team().invites()` | `list`, `iterate`, `retrieve`, `create`, `update`, `revoke` |
+| `team().api_tokens()` | `list`, `iterate`, `create`, `delete(token_id)` |
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
 | `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)`, `retry(webhook_id, delivery_id)` |
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
@@ -352,6 +353,29 @@ let created = lettermint
     .await?;
 let token = created.data.token; // the token's value, shown once: store it now
 lettermint.projects().api_tokens().delete("project-id", &created.data.id).await?;
+# let _ = token;
+# Ok(())
+# }
+```
+
+`team().api_tokens().create(..)` creates a Team API token. The new token can only have abilities that the requesting token has. It copies the requesting token's IP allowlist, and it can't outlive the requesting token: `expires_at` defaults to, and can't be later than, the requesting token's expiry. The response holds the token's value once, in `data.token`; its `Debug` output includes the value, so do not log it. `list` and `iterate` return the team's tokens without their values:
+
+```rust,no_run
+# use lettermint::Lettermint;
+use lettermint::types::StoreTeamApiTokenData;
+
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let created = lettermint
+    .team()
+    .api_tokens()
+    .create(&StoreTeamApiTokenData {
+        name: "Deploy".into(),
+        abilities: vec!["read:domains".into(), "write:projects".into()],
+        expires_at: Some(Some("2026-12-31T23:59:59Z".into())),
+    })
+    .await?;
+let token = created.data.token; // the token's value, shown once: store it now
+lettermint.team().api_tokens().delete(&created.data.id).await?;
 # let _ = token;
 # Ok(())
 # }
