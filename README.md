@@ -327,6 +327,7 @@ let html = lettermint.messages().html("message-id").await?;
 | `messages()` | `list`, `iterate`, `retrieve`, `events`, `iterate_events`, `source`, `html`, `text`, `reschedule`, `cancel`, `resend`, `process` |
 | `projects()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `rotate_token` (deprecated by the API) |
 | `projects().report_forwarding()` | `retrieve`, `update`, `delete`, `verify`, `resend_code` |
+| `projects().api_tokens()` | `list(project_id, ..)`, `iterate(project_id, ..)`, `create(project_id, ..)`, `delete(project_id, token_id)` |
 | `routes()` | `list(project_id, ..)`, `iterate(project_id, ..)`, `create(project_id, ..)`, `retrieve`, `update`, `delete`, `verify_inbound_domain` |
 | `stats()` | `retrieve` |
 | `suppressions()` | `list`, `iterate`, `create`, `delete` |
@@ -336,6 +337,25 @@ let html = lettermint.messages().html("message-id").await?;
 | `webhooks()` | `list`, `iterate`, `create`, `retrieve`, `update`, `delete`, `test`, `regenerate_secret` |
 | `webhooks().deliveries()` | `list(webhook_id, ..)`, `iterate(webhook_id, ..)`, `retrieve(webhook_id, delivery_id)`, `retry(webhook_id, delivery_id)` |
 | (the client) | `ping`, `analytics`, `analytics_pages`, `blocked_file_types` |
+
+`projects().api_tokens().create(project_id, ..)` creates a Project API token. The response holds the token's value once, in `data.token`: use it to send through the API, or as the SMTP password when SMTP is enabled for the project (`smtp` then holds the host, ports and user name, otherwise it is `None`). `short_token: Some(true)` creates a shorter token for devices that limit the password length. The response's `Debug` output includes the value, so do not log it. `list` and `iterate` return the project's tokens without their values:
+
+```rust,no_run
+# use lettermint::Lettermint;
+use lettermint::types::StoreProjectApiTokenData;
+
+# async fn run(lettermint: Lettermint) -> lettermint::Result<()> {
+let created = lettermint
+    .projects()
+    .api_tokens()
+    .create("project-id", &StoreProjectApiTokenData { name: "Production server".into(), ..Default::default() })
+    .await?;
+let token = created.data.token; // the token's value, shown once: store it now
+lettermint.projects().api_tokens().delete("project-id", &created.data.id).await?;
+# let _ = token;
+# Ok(())
+# }
+```
 
 `team().members().remove(user_id)` removes a member other than the Owner. `ListTeamMembersQuery { filter_project_id: Some(project_id), .. }` lists only the members who can access that project: members with access to all projects and members selected for it.
 

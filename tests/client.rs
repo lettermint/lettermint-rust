@@ -248,6 +248,7 @@ fn debug_output_never_shows_tokens() {
         format!("{:?}", client.emails().compose().from("a@example.com")),
         format!("{:?}", client.domains()),
         format!("{:?}", client.projects().report_forwarding()),
+        format!("{:?}", client.projects().api_tokens()),
         format!("{:?}", client.team().members()),
         format!("{:?}", client.webhooks().deliveries()),
         format!("{:?}", client.messages().iterate(&Default::default())),

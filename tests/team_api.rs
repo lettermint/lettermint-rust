@@ -3,12 +3,13 @@ mod common;
 use common::*;
 use futures_core::Stream;
 use lettermint::types::{
-    BuiltInTeamRole, CreateTeamInviteData, CreateTeamInviteDataProjectAccess, CreateTeamRoleData,
-    DeleteTeamRoleQuery, DuplicateTeamRoleData, GetDomainQueryIncludeItem, GetStatsQuery,
-    ListDomainsQuery, ListDomainsQuerySortItem, ListTeamInvitesQuery, ListTeamMembersQuery,
+    ApiTokenSource, BuiltInTeamRole, CreateTeamInviteData, CreateTeamInviteDataProjectAccess,
+    CreateTeamRoleData, DeleteTeamRoleQuery, DuplicateTeamRoleData, GetDomainQueryIncludeItem,
+    GetStatsQuery, ListDomainsQuery, ListDomainsQuerySortItem, ListProjectApiTokensQuery,
+    ListProjectApiTokensQuerySortItem, ListTeamInvitesQuery, ListTeamMembersQuery,
     ListWebhookDeliveriesQuery, MessageStatus, ProjectAccessScope, RbacPermission,
-    RescheduleMessageRequest, ResendMessageRequest, StoreDomainData, UpdateTeamInviteData,
-    UpdateTeamInviteDataProjectAccess, UpdateTeamRoleData,
+    RescheduleMessageRequest, ResendMessageRequest, StoreDomainData, StoreProjectApiTokenData,
+    UpdateTeamInviteData, UpdateTeamInviteDataProjectAccess, UpdateTeamRoleData,
 };
 use lettermint::{Error, SendOptions};
 use serde_json::{Value, json};
@@ -1027,5 +1028,213 @@ async fn iterate_reports_config_errors_on_first_use() {
     let mut routes = client.routes().iterate("..", &Default::default());
     assert!(matches!(routes.next().await, Some(Err(Error::Config(_)))));
     assert!(routes.next().await.is_none());
+    assert_eq!(transport.count(), 0);
+}
+
+fn project_api_token(id: &str) -> Value {
+    json!({"id": id, "project_id": "p1", "name": "Production server", "short_token": false, "created_via": "api", "allowed_ips": [], "last_used_at": null, "created_at": "2026-10-28T09:00:00Z"})
+}
+
+#[tokio::test]
+async fn project_api_tokens_list_and_iterate() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let mut legacy = project_api_token("t0");
+    legacy["created_via"] = Value::Null;
+    legacy["allowed_ips"] = json!(["203.0.113.0/24"]);
+    legacy["last_used_at"] = json!("2026-10-28T10:00:00Z");
+
+    transport.reply(page(json!([project_api_token("t1"), legacy]), Some("c2")));
+    let page_one = client
+        .projects()
+        .api_tokens()
+        .list(
+            "p1",
+            &ListProjectApiTokensQuery {
+                page_size: Some(2),
+                sort: Some(vec![ListProjectApiTokensQuerySortItem::CreatedAtDesc]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(page_one.data[0].id, "t1");
+    assert_eq!(page_one.data[0].project_id, "p1");
+    assert_eq!(page_one.data[0].name, "Production server");
+    assert!(!page_one.data[0].short_token);
+    assert_eq!(page_one.data[0].created_via, Some(ApiTokenSource::Api));
+    assert_eq!(page_one.data[0].last_used_at, None);
+    assert_eq!(page_one.data[1].created_via, None);
+    assert_eq!(page_one.data[1].allowed_ips, ["203.0.113.0/24"]);
+    assert_eq!(
+        page_one.data[1].last_used_at.as_deref(),
+        Some("2026-10-28T10:00:00Z")
+    );
+    assert_eq!(page_one.next_cursor.as_deref(), Some("c2"));
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::GET);
+    assert_eq!(
+        target(&request),
+        "/projects/p1/api-tokens?page%5Bsize%5D=2&sort=-created_at"
+    );
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+
+    transport.reply(page(json!([project_api_token("t1")]), Some("c2")));
+    transport.reply(page(json!([project_api_token("t2")]), None));
+    let mut tokens = client
+        .projects()
+        .api_tokens()
+        .iterate("p 1", &Default::default());
+    let mut ids = Vec::new();
+    while let Some(token) = tokens.next().await {
+        ids.push(token.unwrap().id);
+    }
+    assert_eq!(ids, ["t1", "t2"]);
+    assert_eq!(
+        target(&transport.last()),
+        "/projects/p%201/api-tokens?page%5Bcursor%5D=c2"
+    );
+}
+
+#[tokio::test]
+async fn project_api_tokens_create_and_delete() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let mut secret = project_api_token("t1");
+    secret["token"] = json!("lm_ProjectTokenValue");
+
+    transport.reply(Reply::json(
+        201,
+        json!({"data": secret, "smtp": {"host": "smtp.lettermint.co", "ports": [465, 587], "username": "lettermint"}, "message": "API token created."}),
+    ));
+    let created = client
+        .projects()
+        .api_tokens()
+        .create(
+            "p1",
+            &StoreProjectApiTokenData {
+                name: "Production server".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.data.id, "t1");
+    assert_eq!(created.data.token, "lm_ProjectTokenValue");
+    assert_eq!(created.data.created_via, Some(ApiTokenSource::Api));
+    assert_eq!(created.message, "API token created.");
+    let smtp = created.smtp.unwrap();
+    assert_eq!(smtp.host, "smtp.lettermint.co");
+    assert_eq!(smtp.ports, [465, 587]);
+    assert_eq!(smtp.username, "lettermint");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::POST);
+    assert_eq!(target(&request), "/projects/p1/api-tokens");
+    assert_team_auth(&request);
+    assert_eq!(header(&request, "content-type"), Some("application/json"));
+    // Without short_token the key is left out.
+    assert_eq!(body_json(&request), json!({"name": "Production server"}));
+
+    // Without SMTP for the project, smtp is null.
+    secret["short_token"] = json!(true);
+    transport.reply(Reply::json(
+        201,
+        json!({"data": secret, "smtp": null, "message": "API token created."}),
+    ));
+    let created = client
+        .projects()
+        .api_tokens()
+        .create(
+            "p1",
+            &StoreProjectApiTokenData {
+                name: "Printer".into(),
+                short_token: Some(true),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(created.data.short_token);
+    assert_eq!(created.smtp, None);
+    assert_eq!(
+        body_json(&transport.last()),
+        json!({"name": "Printer", "short_token": true})
+    );
+
+    transport.reply(Reply::json(200, json!({"message": "API token deleted."})));
+    let deleted = client
+        .projects()
+        .api_tokens()
+        .delete("p1", "t/1")
+        .await
+        .unwrap();
+    assert_eq!(deleted.message, "API token deleted.");
+    let request = transport.last();
+    assert_eq!(request.method, http::Method::DELETE);
+    assert_eq!(target(&request), "/projects/p1/api-tokens/t%2F1");
+    assert_team_auth(&request);
+    assert_eq!(request.body, None);
+}
+
+#[tokio::test]
+async fn project_api_token_errors_map_to_the_error_variants() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+
+    transport.reply(Reply::json(
+        422,
+        json!({"message": "The name field is required.", "errors": {"name": ["The name field is required."]}}),
+    ));
+    let error = client
+        .projects()
+        .api_tokens()
+        .create("p1", &Default::default())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Validation(_)), "{error:?}");
+    assert_eq!(
+        error.api_error().unwrap().errors().unwrap()["name"],
+        ["The name field is required."]
+    );
+
+    transport.reply(Reply::json(404, json!({"message": "Not found."})));
+    let error = client
+        .projects()
+        .api_tokens()
+        .delete("p1", "t9")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::NotFound(_)), "{error:?}");
+    assert_eq!(error.status(), Some(404));
+}
+
+#[tokio::test]
+async fn project_api_tokens_check_their_path_parameters_and_token() {
+    let transport = MockTransport::new();
+    let client = team_client(&transport);
+    let tokens = client.projects().api_tokens();
+    for id in ["", ".", ".."] {
+        let errors = [
+            tokens.list(id, &Default::default()).await.unwrap_err(),
+            tokens.create(id, &Default::default()).await.unwrap_err(),
+            tokens.delete(id, "t1").await.unwrap_err(),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Config(_)), "{id:?}: {error:?}");
+            assert!(error.to_string().contains("`project_id`"), "{error}");
+        }
+        let error = tokens.delete("p1", id).await.unwrap_err();
+        assert!(matches!(error, Error::Config(_)), "{id:?}: {error:?}");
+        assert!(error.to_string().contains("`token_id`"), "{error}");
+    }
+
+    let error = sending_client(&transport)
+        .projects()
+        .api_tokens()
+        .create("p1", &Default::default())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, Error::Config(_)), "{error:?}");
+    assert!(error.to_string().contains("team_token"), "{error}");
     assert_eq!(transport.count(), 0);
 }
